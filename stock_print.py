@@ -28,7 +28,7 @@ def main():
     st.set_page_config(page_title="Stock Price Visualization", page_icon=":chart_with_upwards_trend:")
     st.title("_주가 시각화_ :chart_with_upwards_trend:")
 
-    # ✅ 세션 상태 초기화 (처음 실행 시)
+    # ✅ 세션 상태 초기화
     if "company_name" not in st.session_state:
         st.session_state.company_name = ""
     if "selected_period" not in st.session_state:
@@ -38,23 +38,18 @@ def main():
         company_name = st.text_input("분석할 기업명 (코스피 상장)", st.session_state.company_name)
         process = st.button("시각화 시작")
 
-    # ✅ 선택한 기간이 변경될 때 실행될 함수
-    def update_selected_period():
-        st.session_state.selected_period = st.session_state.radio_value
-
     # ✅ 기업명이 입력되었을 경우만 실행
     if process or st.session_state.company_name:
         st.session_state.company_name = company_name  # ✅ 세션에 저장
         st.subheader(f"📈 {st.session_state.company_name} 최근 주가 추이")
 
         # ✅ 반응형 UI 버튼 추가 (선택한 기간을 즉시 반영)
-        st.session_state.radio_value = st.radio(
+        st.radio(
             "기간 선택",
             options=["1day", "week", "1month", "1year"],
             index=["1day", "week", "1month", "1year"].index(st.session_state.selected_period),
             horizontal=True,
-            key="radio_value",
-            on_change=update_selected_period  # ✅ 변경 즉시 반영
+            key="selected_period"  # ✅ `key`를 지정하면 자동으로 값이 업데이트됨
         )
 
         st.write(f"🔍 선택된 기간: {st.session_state.selected_period}")
@@ -90,10 +85,6 @@ def main():
 
 # ✅ 3. 주가 시각화 & 티커 조회 함수
 def get_ticker(company):
-    """
-    FinanceDataReader를 통해 KRX 상장 기업 정보를 불러오고,
-    입력한 기업명에 해당하는 티커 코드를 반환합니다.
-    """
     try:
         listing = fdr.StockListing('KRX')
         if listing.empty:
@@ -103,13 +94,11 @@ def get_ticker(company):
             st.error("상장 기업 정보를 불러올 수 없습니다.")
             return None
 
-        # 컬럼명 처리 (KRX 데이터 컬럼명 기준)
         for name_col, ticker_col in [("Name", "Code"), ("Name", "Symbol"), ("기업명", "종목코드")]:
             if name_col in listing.columns and ticker_col in listing.columns:
                 ticker_row = listing[listing[name_col].str.strip() == company.strip()]
                 if not ticker_row.empty:
-                    ticker = str(ticker_row.iloc[0][ticker_col]).zfill(6)
-                    return ticker
+                    return str(ticker_row.iloc[0][ticker_col]).zfill(6)
 
         st.error(f"'{company}'에 해당하는 티커 정보를 찾을 수 없습니다.")
         return None
@@ -120,11 +109,6 @@ def get_ticker(company):
 
 # ✅ 4. 네이버 금융 시간별 시세 크롤링 함수
 def get_intraday_data_bs(ticker):
-    """
-    네이버 금융에서 시간별 체결가 데이터를 가져와 DataFrame으로 반환
-    :param ticker: 종목코드
-    :return: DataFrame (Datetime, Close)
-    """
     base_url = f"https://finance.naver.com/item/sise_time.naver?code={ticker}&page="
     headers = {"User-Agent": "Mozilla/5.0"}
 
@@ -172,12 +156,6 @@ def get_intraday_data_bs(ticker):
 
 # ✅ 5. 주가 시각화 함수
 def plot_stock(df, company, period):
-    """
-    가져온 주가 데이터를 기반으로 그래프 그리기
-    :param df: 주가 데이터 DataFrame
-    :param company: 기업명
-    :param period: 기간 (1day, week, 1month, 1year)
-    """
     if df is None or df.empty:
         st.warning(f"📉 {company} - 해당 기간({period})의 거래 데이터가 없습니다.")
         return
