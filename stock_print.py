@@ -6,6 +6,9 @@ import FinanceDataReader as fdr
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import pandas as pd
+import os
+import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 
 # ✅ 1. 한글 폰트 설정
 def set_korean_font():
