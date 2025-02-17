@@ -23,10 +23,10 @@ def set_korean_font():
 
 set_korean_font()
 
-# ✅ 2. 장이 열린 가장 최근 거래일 찾기
+# ✅ 2. 최근 거래일 찾기 함수
 def get_recent_trading_day():
     today = datetime.now()
-    if today.hour < 9:  # 현재 시간이 오전 9시 이전이면 전날을 기준으로
+    if today.hour < 9:  # 오전 9시 이전이면 전날을 기준으로
         today -= timedelta(days=1)
 
     # 주말 및 공휴일 고려하여 가장 최근의 거래일 찾기
@@ -40,69 +40,61 @@ def main():
     st.set_page_config(page_title="Stock Price Visualization", page_icon=":chart_with_upwards_trend:")
     st.title("_주가 시각화_ :chart_with_upwards_trend:")
 
-    # ✅ 세션 상태 초기화 (처음 실행 시)
+    # ✅ 세션 상태 초기화
     if "company_name" not in st.session_state:
         st.session_state.company_name = ""
     if "selected_period" not in st.session_state:
         st.session_state.selected_period = "1day"
-    if "data_loaded" not in st.session_state:
-        st.session_state.data_loaded = False  # ✅ 데이터를 불러왔는지 체크하는 변수 추가
 
     with st.sidebar:
         company_name = st.text_input("분석할 기업명 (코스피 상장)", st.session_state.company_name)
-        process = st.button("검색")  # ✅ 검색 버튼 추가
+        process = st.button("검색")
 
-    # ✅ 검색 버튼이 눌리면 기업명 업데이트
     if process and company_name:
         st.session_state.company_name = company_name
-        st.session_state.data_loaded = False  # 새 검색 시 데이터 리셋
 
     # ✅ 기업명이 입력되었을 경우만 실행
     if st.session_state.company_name:
         st.subheader(f"📈 {st.session_state.company_name} 최근 주가 추이")
 
-        # ✅ 반응형 UI 버튼 추가 (선택한 기간을 즉시 반영)
+        # ✅ 기간 선택 버튼
         selected_period = st.radio(
             "기간 선택",
             options=["1day", "week", "1month", "1year"],
             horizontal=True,
-            index=["1day", "week", "1month", "1year"].index(st.session_state.selected_period),
+            index=["1day", "week", "1month", "1year"].index(st.session_state.selected_period)
         )
 
-        # ✅ 선택한 값 즉시 반영
         if selected_period != st.session_state.selected_period:
             st.session_state.selected_period = selected_period
-            st.session_state.data_loaded = False  # ✅ 새로운 기간 선택 시 데이터 다시 로드
 
         st.write(f"🔍 선택된 기간: {st.session_state.selected_period}")
 
-        # ✅ 데이터가 로드되지 않은 경우만 실행
-        if not st.session_state.data_loaded:
-            with st.spinner(f"📊 {st.session_state.company_name} ({st.session_state.selected_period}) 데이터 불러오는 중..."):
-                ticker = get_ticker(st.session_state.company_name)
-                if not ticker:
-                    st.error("해당 기업의 티커 코드를 찾을 수 없습니다.")
-                    return
+        # ✅ 주가 데이터 가져오기
+        with st.spinner(f"📊 {st.session_state.company_name} ({st.session_state.selected_period}) 데이터 불러오는 중..."):
+            ticker = get_ticker(st.session_state.company_name)
+            if not ticker:
+                st.error("해당 기업의 티커 코드를 찾을 수 없습니다.")
+                return
 
-                st.write(f"✅ 가져온 티커 코드: {ticker}")
+            st.write(f"✅ 가져온 티커 코드: {ticker}")
 
-                df = None
-                try:
-                    if st.session_state.selected_period in ["1day", "week"]:
-                        st.write("⏳ 1일 또는 1주 데이터 가져오는 중...")
-                        df = get_intraday_data_bs(ticker, st.session_state.selected_period)  # ✅ 네이버 금융 크롤링
-                    else:
-                        st.write("⏳ 1개월 또는 1년 데이터 가져오는 중...")
-                        df = get_daily_stock_data(ticker, st.session_state.selected_period)  # ✅ FinanceDataReader 사용
+            df = None
+            try:
+                if st.session_state.selected_period in ["1day", "week"]:
+                    st.write("⏳ 1일 또는 1주 데이터 가져오는 중...")
+                    df = get_intraday_data_bs(ticker, st.session_state.selected_period)
+                else:
+                    st.write("⏳ 1개월 또는 1년 데이터 가져오는 중...")
+                    df = get_daily_stock_data(ticker, st.session_state.selected_period)
 
-                    if df is None or df.empty:
-                        st.warning(f"📉 {st.session_state.company_name} ({ticker}) - 해당 기간({st.session_state.selected_period})의 거래 데이터가 없습니다.")
-                    else:
-                        st.session_state.data_loaded = True  # ✅ 데이터 로드 완료
-                        plot_stock(df, st.session_state.company_name, st.session_state.selected_period)
+                if df is None or df.empty:
+                    st.warning(f"📉 {st.session_state.company_name} ({ticker}) - 해당 기간({st.session_state.selected_period})의 거래 데이터가 없습니다.")
+                else:
+                    plot_stock(df, st.session_state.company_name, st.session_state.selected_period)
 
-                except Exception as e:
-                    st.error(f"주가 데이터를 불러오는 중 오류 발생: {e}")
+            except Exception as e:
+                st.error(f"주가 데이터를 불러오는 중 오류 발생: {e}")
 
 # ✅ 4. 주가 시각화 & 티커 조회 함수
 def get_ticker(company):
@@ -128,7 +120,7 @@ def get_ticker(company):
         st.error(f"티커 조회 중 오류 발생: {e}")
         return None
 
-# ✅ 5. 네이버 금융 시간별 시세 크롤링 함수
+# ✅ 5. 네이버 금융 시간별 시세 크롤링 함수 (1일/1주)
 def get_intraday_data_bs(ticker, period):
     base_url = f"https://finance.naver.com/item/sise_time.naver?code={ticker}&page="
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -137,7 +129,7 @@ def get_intraday_data_bs(ticker, period):
     times = []
     page = 1
 
-    recent_trading_day = get_recent_trading_day()  # ✅ 가장 최근 거래일을 기준으로 가져옴
+    recent_trading_day = get_recent_trading_day()  # ✅ 가장 최근 거래일
 
     while True:
         url = base_url + str(page)
@@ -177,7 +169,7 @@ def get_intraday_data_bs(ticker, period):
 
     return df
 
-# ✅ 6. FinanceDataReader를 통한 일별 시세 크롤링 함수
+# ✅ 6. FinanceDataReader를 통한 일별 시세 크롤링 함수 (1개월/1년)
 def get_daily_stock_data(ticker, period):
     end_date = get_recent_trading_day()
     start_date = (datetime.strptime(end_date, '%Y-%m-%d') - timedelta(days=30 if period == "1month" else 365)).strftime('%Y-%m-%d')
