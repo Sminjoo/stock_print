@@ -10,20 +10,19 @@ import os
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 
-# ✅ 1. 한글 폰트 설정
+# ✅ 폰트 경로 설정
+FONT_PATH = os.path.join(os.path.dirname(__file__), "fonts", "NanumGothic.ttf")
+
 def set_korean_font():
-    import matplotlib.pyplot as plt
-    import matplotlib.font_manager as fm
-    font_path = "/usr/share/fonts/truetype/nanum/NanumGothic.ttf"
-    if not os.path.exists(font_path):  
-        os.system("apt-get update -qq")
-        os.system("apt-get install fonts-nanum* -qq")
+    if os.path.exists(FONT_PATH):
+        fe = fm.FontEntry(fname=FONT_PATH, name="NanumGothic")
+        fm.fontManager.ttflist.insert(0, fe)
+        plt.rcParams.update({"font.family": "NanumGothic", "axes.unicode_minus": False})
+        print("✅ 한글 폰트 로드 완료")
+    else:
+        print("⚠️ 폰트 파일을 찾을 수 없습니다. 'fonts/NanumGothic.ttf' 위치 확인 필요!")
 
-    fe = fm.FontEntry(fname=font_path, name="NanumGothic")
-    fm.fontManager.ttflist.insert(0, fe)  
-    plt.rcParams.update({"font.family": "NanumGothic", "axes.unicode_minus": False})
-
-set_korean_font()  # ✅ 한 번만 실행
+set_korean_font()
 
 # ✅ 2. 메인 실행 함수
 def main():
