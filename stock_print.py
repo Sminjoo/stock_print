@@ -40,7 +40,7 @@ def main():
 
     # ✅ 선택한 기간이 변경될 때 실행될 함수
     def update_selected_period():
-        st.session_state.selected_period = st.session_state.temp_selected_period
+        st.session_state.selected_period = st.session_state.radio_value
 
     # ✅ 기업명이 입력되었을 경우만 실행
     if process or st.session_state.company_name:
@@ -48,12 +48,12 @@ def main():
         st.subheader(f"📈 {st.session_state.company_name} 최근 주가 추이")
 
         # ✅ 반응형 UI 버튼 추가 (선택한 기간을 즉시 반영)
-        st.session_state.temp_selected_period = st.radio(
+        st.session_state.radio_value = st.radio(
             "기간 선택",
             options=["1day", "week", "1month", "1year"],
             index=["1day", "week", "1month", "1year"].index(st.session_state.selected_period),
             horizontal=True,
-            key="temp_selected_period",
+            key="radio_value",
             on_change=update_selected_period  # ✅ 변경 즉시 반영
         )
 
@@ -196,4 +196,3 @@ def plot_stock(df, company, period):
 # ✅ 실행
 if __name__ == '__main__':
     main()
-
