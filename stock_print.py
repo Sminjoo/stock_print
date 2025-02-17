@@ -103,78 +103,83 @@ def get_ticker(company):
         return None
 
 # ✅ 4. 네이버 금융 시간별 시세 크롤링 함수 (Requests 사용)
-def get_intraday_data_bs(ticker):
+def get_intraday_prices(ticker):
     """
-    네이버 금융에서 시간별 체결가 데이터를 가져와 DataFrame으로 반환 (Selenium 없이 Requests 사용)
+    네이버 금융에서 1일(1day) 시간별 체결가 데이터를 가져와 DataFrame으로 반환
     :param ticker: 종목코드 (예: '035720' - 카카오)
-    :return: DataFrame (Datetime, Close, Volume)
+    :return: DataFrame (Datetime, Close)
     """
-    base_url = f"https://finance.naver.com/item/sise_time.naver?code={ticker}&page="
+    base_url = f"https://finance.naver.com/item/sise_time.naver?code={ticker}&page=1"
     headers = {"User-Agent": "Mozilla/5.0"}
     
-    price = []  # 체결가 저장 리스트
-    volume = []  # 거래량 저장 리스트
-    times = []  # 체결 시간 저장 리스트
-    page = 1  # 첫 번째 페이지부터 시작
+    res = requests.get(base_url, headers=headers)
+    time.sleep(1)  # 서버 부하 방지
+    soup = BeautifulSoup(res.text, "html.parser")
+    
+    # ✅ iframe URL 찾기
+    iframe_tag = soup.select_one("iframe[name='day']")
+    if iframe_tag:
+        iframe_src = iframe_tag["src"]
+        full_url = f"https://finance.naver.com{iframe_src}"
 
-    while True:
-        url = base_url + str(page)
-        res = requests.get(url, headers=headers)
-        time.sleep(1)  # 네이버 서버 부하 방지를 위해 1초 대기
+        # 🔥 iframe 내부 HTML 가져오기
+        res_iframe = requests.get(full_url, headers=headers)
+        soup_iframe = BeautifulSoup(res_iframe.text, "html.parser")
+        
+        # ✅ 데이터 크롤링
+        rows = soup_iframe.select("table.type2 tr")
 
-        soup = BeautifulSoup(res.text, "html.parser")
-        rows = soup.select("table.type2 tr")
-
-        # 데이터가 없거나 마지막 페이지면 종료
-        if not rows or "체결시각" in rows[0].text:
-            break
-
+        data = []
         for row in rows:
             cols = row.find_all("td")
-            if len(cols) < 6:  # 데이터가 부족하면 무시
+            if len(cols) < 2:  # 데이터가 부족하면 무시
                 continue  
 
             try:
                 time_str = cols[0].text.strip()  # HH:MM 형식의 시간
                 close_price = int(cols[1].text.replace(",", ""))  # 체결가
-                volume_data = int(cols[5].text.replace(",", ""))  # 거래량
-
-                times.append(time_str)
-                price.append(close_price)
-                volume.append(volume_data)
+                
+                data.append([time_str, close_price])
 
             except ValueError:
                 continue
 
-        page += 1  # 다음 페이지로 이동
+        # ✅ DataFrame 생성
+        if not data:
+            return pd.DataFrame()
+        
+        df = pd.DataFrame(data, columns=["Time", "Close"])
+        df["Date"] = datetime.today().strftime("%Y-%m-%d")  # 날짜 추가
+        df["Datetime"] = pd.to_datetime(df["Date"] + " " + df["Time"])  # 시간 합치기
+        df.set_index("Datetime", inplace=True)
+        df = df[["Close"]]  # 체결가만 남기기
 
-    # ✅ DataFrame 생성 및 정리
-    if not price or not volume:
+        return df
+    else:
+        print("❌ iframe을 찾을 수 없습니다.")
         return pd.DataFrame()
-
-    df = pd.DataFrame({"Time": times, "Close": price, "Volume": volume})
-    df["Date"] = datetime.today().strftime("%Y-%m-%d")  # 날짜 추가
-    df["Datetime"] = pd.to_datetime(df["Date"] + " " + df["Time"])  # 시간 합치기
-    df.set_index("Datetime", inplace=True)
-    df = df[["Close", "Volume"]]  # 필요한 열만 남기기
-
-    return df
-
+        
 # ✅ 5. 주가 시각화 함수
-def visualize_stock(df, company, period):
+def plot_intraday_stock(df, company):
     """
-    가져온 주가 데이터를 기반으로 시각화
+    가져온 주가 데이터를 기반으로 시간별 체결가 그래프 그리기 (Streamlit 호환)
     :param df: 주가 데이터 DataFrame
     :param company: 기업명
-    :param period: 기간 (1day, week, 1month, 1year)
     """
     if df is None or df.empty:
-        st.warning(f"📉 {company} - 해당 기간({period})의 거래 데이터가 없습니다.")
+        st.warning(f"📉 {company} - 해당 기간(1day)의 거래 데이터가 없습니다.")
         return
 
-    fig, _ = mpf.plot(df, type='line' if period in ["1day", "week"] else 'candle',
-                       style='charles', title=f"{company} 주가 ({period})",
-                       volume=True, returnfig=True)
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(df.index, df["Close"], marker="o", linestyle="-", color="b", label="체결가")
+    ax.set_xlabel("시간")
+    ax.set_ylabel("주가 (체결가)")
+    ax.set_title(f"{company} 주가 (1day)")
+    ax.legend()
+    ax.grid()
+    plt.xticks(rotation=45)
+
+    # ✅ Streamlit에 맞게 그래프 출력
     st.pyplot(fig)
 
 # ✅ 실행
