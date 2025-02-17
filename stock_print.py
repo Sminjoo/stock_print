@@ -38,7 +38,7 @@ def main():
 
     with st.sidebar:
         company_name = st.text_input("분석할 기업명 (코스피 상장)", st.session_state.company_name)
-        process = st.button("시각화 시작")  # ✅ 검색 버튼 추가
+        process = st.button("검색")  # ✅ 검색 버튼 추가
 
     # ✅ 검색 버튼이 눌리면 기업명 업데이트
     if process and company_name:
