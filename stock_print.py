@@ -23,7 +23,19 @@ def set_korean_font():
 
 set_korean_font()
 
-# ✅ 2. 메인 실행 함수
+# ✅ 2. 장이 열린 가장 최근 거래일 찾기
+def get_recent_trading_day():
+    today = datetime.now()
+    if today.hour < 9:  # 현재 시간이 오전 9시 이전이면 전날을 기준으로
+        today -= timedelta(days=1)
+
+    # 주말 및 공휴일 고려하여 가장 최근의 거래일 찾기
+    while today.weekday() in [5, 6]:  # 토요일(5), 일요일(6)이면 하루씩 감소
+        today -= timedelta(days=1)
+
+    return today.strftime('%Y-%m-%d')
+
+# ✅ 3. 메인 실행 함수
 def main():
     st.set_page_config(page_title="Stock Price Visualization", page_icon=":chart_with_upwards_trend:")
     st.title("_주가 시각화_ :chart_with_upwards_trend:")
@@ -78,7 +90,7 @@ def main():
                 try:
                     if st.session_state.selected_period in ["1day", "week"]:
                         st.write("⏳ 1일 또는 1주 데이터 가져오는 중...")
-                        df = get_intraday_data_bs(ticker)  # ✅ 네이버 금융 크롤링
+                        df = get_intraday_data_bs(ticker, st.session_state.selected_period)  # ✅ 네이버 금융 크롤링
                     else:
                         st.write("⏳ 1개월 또는 1년 데이터 가져오는 중...")
                         df = get_daily_stock_data(ticker, st.session_state.selected_period)  # ✅ FinanceDataReader 사용
@@ -92,7 +104,7 @@ def main():
                 except Exception as e:
                     st.error(f"주가 데이터를 불러오는 중 오류 발생: {e}")
 
-# ✅ 3. 주가 시각화 & 티커 조회 함수
+# ✅ 4. 주가 시각화 & 티커 조회 함수
 def get_ticker(company):
     try:
         listing = fdr.StockListing('KRX')
@@ -116,14 +128,16 @@ def get_ticker(company):
         st.error(f"티커 조회 중 오류 발생: {e}")
         return None
 
-# ✅ 4. 네이버 금융 시간별 시세 크롤링 함수
-def get_intraday_data_bs(ticker):
+# ✅ 5. 네이버 금융 시간별 시세 크롤링 함수
+def get_intraday_data_bs(ticker, period):
     base_url = f"https://finance.naver.com/item/sise_time.naver?code={ticker}&page="
     headers = {"User-Agent": "Mozilla/5.0"}
 
     prices = []
     times = []
     page = 1
+
+    recent_trading_day = get_recent_trading_day()  # ✅ 가장 최근 거래일을 기준으로 가져옴
 
     while True:
         url = base_url + str(page)
@@ -157,20 +171,20 @@ def get_intraday_data_bs(ticker):
         return pd.DataFrame()
 
     df = pd.DataFrame({"Time": times, "Close": prices})
-    df["Date"] = datetime.today().strftime("%Y-%m-%d")
+    df["Date"] = recent_trading_day
     df["Datetime"] = pd.to_datetime(df["Date"] + " " + df["Time"])
     df.set_index("Datetime", inplace=True)
 
     return df
 
-# ✅ 5. FinanceDataReader를 통한 일별 시세 크롤링 함수
+# ✅ 6. FinanceDataReader를 통한 일별 시세 크롤링 함수
 def get_daily_stock_data(ticker, period):
-    end_date = datetime.now().strftime('%Y-%m-%d')
-    start_date = (datetime.now() - timedelta(days=30 if period == "1month" else 365)).strftime('%Y-%m-%d')
+    end_date = get_recent_trading_day()
+    start_date = (datetime.strptime(end_date, '%Y-%m-%d') - timedelta(days=30 if period == "1month" else 365)).strftime('%Y-%m-%d')
     df = fdr.DataReader(ticker, start_date, end_date)
     return df
 
-# ✅ 6. 주가 시각화 함수
+# ✅ 7. 주가 시각화 함수
 def plot_stock(df, company, period):
     if df is None or df.empty:
         st.warning(f"📉 {company} - 해당 기간({period})의 거래 데이터가 없습니다.")
@@ -190,5 +204,3 @@ def plot_stock(df, company, period):
 # ✅ 실행
 if __name__ == '__main__':
     main()
-
-
