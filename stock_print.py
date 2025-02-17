@@ -34,6 +34,7 @@ def main():
         process = st.button("시각화 시작")
 
     if process:
+        st.write("📢 버튼 클릭됨!")  # 디버깅 로그
         if not company_name:
             st.info("기업명을 입력해주세요.")
             st.stop()
@@ -52,6 +53,8 @@ def main():
                 st.error("해당 기업의 티커 코드를 찾을 수 없습니다.")
                 st.stop()
 
+            st.write(f"✅ 가져온 티커 코드: {ticker}")  # 디버깅 로그
+
             df = None
             try:
                 if selected_period in ["1day", "week"]:
@@ -63,6 +66,7 @@ def main():
                 if df is None or df.empty:
                     st.warning(f"📉 {company_name} ({ticker}) - 해당 기간({selected_period})의 거래 데이터가 없습니다.")
                 else:
+                    st.write(df.head())  # 디버깅 로그
                     plot_stock(df, company_name, selected_period)
 
             except Exception as e:
@@ -84,10 +88,8 @@ def get_ticker(company):
                 ticker_row = listing[listing[name_col].str.strip() == company.strip()]
                 if not ticker_row.empty:
                     ticker = str(ticker_row.iloc[0][ticker_col]).zfill(6)
-                    st.write(f"✅ 가져온 티커 코드: {ticker}")
                     return ticker
 
-        st.error(f"'{company}'에 해당하는 티커 정보를 찾을 수 없습니다.")
         return None
 
     except Exception as e:
@@ -138,8 +140,6 @@ def get_intraday_data_bs(ticker):
     df["Date"] = datetime.today().strftime("%Y-%m-%d")
     df["Datetime"] = pd.to_datetime(df["Date"] + " " + df["Time"])
     df.set_index("Datetime", inplace=True)
-    df = df[["Close"]]
-
     return df
 
 # ✅ 5. FinanceDataReader를 통한 일별 시세 크롤링 함수
@@ -184,4 +184,3 @@ def plot_stock(df, company, period):
 # ✅ 실행
 if __name__ == '__main__':
     main()
-
