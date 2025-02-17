@@ -103,33 +103,31 @@ def get_ticker(company):
         return None
 
 # ✅ 4. 네이버 금융 시간별 시세 크롤링 함수 (Requests 사용)
-def get_intraday_prices(ticker):
+def get_intraday_data_bs(ticker):
     """
-    네이버 금융에서 1일(1day) 시간별 체결가 데이터를 가져와 DataFrame으로 반환
+    네이버 금융에서 시간별 체결가 데이터를 가져와 DataFrame으로 반환
     :param ticker: 종목코드 (예: '035720' - 카카오)
     :return: DataFrame (Datetime, Close)
     """
-    base_url = f"https://finance.naver.com/item/sise_time.naver?code={ticker}&page=1"
+    base_url = f"https://finance.naver.com/item/sise_time.naver?code={ticker}&page="
     headers = {"User-Agent": "Mozilla/5.0"}
-    
-    res = requests.get(base_url, headers=headers)
-    time.sleep(1)  # 서버 부하 방지
-    soup = BeautifulSoup(res.text, "html.parser")
-    
-    # ✅ iframe URL 찾기
-    iframe_tag = soup.select_one("iframe[name='day']")
-    if iframe_tag:
-        iframe_src = iframe_tag["src"]
-        full_url = f"https://finance.naver.com{iframe_src}"
 
-        # 🔥 iframe 내부 HTML 가져오기
-        res_iframe = requests.get(full_url, headers=headers)
-        soup_iframe = BeautifulSoup(res_iframe.text, "html.parser")
-        
-        # ✅ 데이터 크롤링
-        rows = soup_iframe.select("table.type2 tr")
+    prices = []  # 체결가 저장 리스트
+    times = []  # 체결 시간 저장 리스트
+    page = 1  # 첫 번째 페이지부터 시작
 
-        data = []
+    while True:
+        url = base_url + str(page)
+        res = requests.get(url, headers=headers)
+        time.sleep(1)  # 네이버 서버 부하 방지를 위해 1초 대기
+
+        soup = BeautifulSoup(res.text, "html.parser")
+        rows = soup.select("table.type2 tr")
+
+        # 데이터가 없거나 마지막 페이지면 종료
+        if not rows or "체결시각" in rows[0].text:
+            break
+
         for row in rows:
             cols = row.find_all("td")
             if len(cols) < 2:  # 데이터가 부족하면 무시
@@ -138,26 +136,26 @@ def get_intraday_prices(ticker):
             try:
                 time_str = cols[0].text.strip()  # HH:MM 형식의 시간
                 close_price = int(cols[1].text.replace(",", ""))  # 체결가
-                
-                data.append([time_str, close_price])
+
+                times.append(time_str)
+                prices.append(close_price)
 
             except ValueError:
                 continue
 
-        # ✅ DataFrame 생성
-        if not data:
-            return pd.DataFrame()
-        
-        df = pd.DataFrame(data, columns=["Time", "Close"])
-        df["Date"] = datetime.today().strftime("%Y-%m-%d")  # 날짜 추가
-        df["Datetime"] = pd.to_datetime(df["Date"] + " " + df["Time"])  # 시간 합치기
-        df.set_index("Datetime", inplace=True)
-        df = df[["Close"]]  # 체결가만 남기기
+        page += 1  # 다음 페이지로 이동
 
-        return df
-    else:
-        print("❌ iframe을 찾을 수 없습니다.")
+    # ✅ DataFrame 생성 및 정리
+    if not prices:
         return pd.DataFrame()
+
+    df = pd.DataFrame({"Time": times, "Close": prices})
+    df["Date"] = datetime.today().strftime("%Y-%m-%d")  # 날짜 추가
+    df["Datetime"] = pd.to_datetime(df["Date"] + " " + df["Time"])  # 시간 합치기
+    df.set_index("Datetime", inplace=True)
+    df = df[["Close"]]  # 필요한 열만 남기기
+
+    return df
         
 # ✅ 5. 주가 시각화 함수
 def plot_intraday_stock(df, company):
