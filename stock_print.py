@@ -38,22 +38,24 @@ def main():
         company_name = st.text_input("분석할 기업명 (코스피 상장)", st.session_state.company_name)
         process = st.button("시각화 시작")
 
-    if process:
-        st.session_state.company_name = company_name  # ✅ 세션에 저장
-        st.write("📢 버튼 클릭됨!")
+    # ✅ 선택한 기간이 변경될 때 실행될 함수
+    def update_selected_period():
+        st.session_state.selected_period = st.session_state.temp_selected_period
 
     # ✅ 기업명이 입력되었을 경우만 실행
-    if st.session_state.company_name:
+    if process or st.session_state.company_name:
+        st.session_state.company_name = company_name  # ✅ 세션에 저장
         st.subheader(f"📈 {st.session_state.company_name} 최근 주가 추이")
 
         # ✅ 반응형 UI 버튼 추가 (선택한 기간을 즉시 반영)
-        selected_period = st.radio(
+        st.session_state.temp_selected_period = st.radio(
             "기간 선택",
             options=["1day", "week", "1month", "1year"],
+            index=["1day", "week", "1month", "1year"].index(st.session_state.selected_period),
             horizontal=True,
-            index=["1day", "week", "1month", "1year"].index(st.session_state.selected_period)
+            key="temp_selected_period",
+            on_change=update_selected_period  # ✅ 변경 즉시 반영
         )
-        st.session_state.selected_period = selected_period  # ✅ 세션에 저장
 
         st.write(f"🔍 선택된 기간: {st.session_state.selected_period}")
 
