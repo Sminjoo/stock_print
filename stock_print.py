@@ -44,7 +44,7 @@ def main():
         st.subheader(f"📈 {st.session_state.company_name} 최근 주가 추이")
 
         # ✅ 반응형 UI 버튼 추가 (선택한 기간을 즉시 반영)
-        st.radio(
+        selected_period = st.radio(
             "기간 선택",
             options=["1day", "week", "1month", "1year"],
             index=["1day", "week", "1month", "1year"].index(st.session_state.selected_period),
@@ -52,10 +52,10 @@ def main():
             key="selected_period"  # ✅ `key`를 지정하면 자동으로 값이 업데이트됨
         )
 
-        st.write(f"🔍 선택된 기간: {st.session_state.selected_period}")
+        st.write(f"🔍 선택된 기간: {selected_period}")
 
         # ✅ 주가 데이터를 가져오고 시각화
-        with st.spinner(f"📊 {st.session_state.company_name} ({st.session_state.selected_period}) 데이터 불러오는 중..."):
+        with st.spinner(f"📊 {st.session_state.company_name} ({selected_period}) 데이터 불러오는 중..."):
             ticker = get_ticker(st.session_state.company_name)
             if not ticker:
                 st.error("해당 기업의 티커 코드를 찾을 수 없습니다.")
@@ -65,20 +65,18 @@ def main():
 
             df = None
             try:
-                if st.session_state.selected_period in ["1day", "week"]:
+                if selected_period in ["1day", "week"]:
                     st.write("⏳ 1일 또는 1주 데이터 가져오는 중...")
-                    df = get_intraday_data_bs(ticker)  # ✅ Requests 기반 크롤링 적용
-                else:
+                    df = get_intraday_data_bs(ticker)  # ✅ 네이버 금융 크롤링
+                elif selected_period in ["1month", "1year"]:
                     st.write("⏳ 1개월 또는 1년 데이터 가져오는 중...")
-                    end_date = datetime.now().strftime('%Y-%m-%d')
-                    start_date = (datetime.now() - timedelta(days=30 if st.session_state.selected_period == "1month" else 365)).strftime('%Y-%m-%d')
-                    df = fdr.DataReader(ticker, start_date, end_date)
+                    df = get_daily_stock_data(ticker, selected_period)  # ✅ FinanceDataReader 사용
 
                 if df is None or df.empty:
-                    st.warning(f"📉 {st.session_state.company_name} ({ticker}) - 해당 기간({st.session_state.selected_period})의 거래 데이터가 없습니다.")
+                    st.warning(f"📉 {st.session_state.company_name} ({ticker}) - 해당 기간({selected_period})의 거래 데이터가 없습니다.")
                 else:
                     st.write(f"📊 데이터 미리보기:\n{df.head()}")
-                    plot_stock(df, st.session_state.company_name, st.session_state.selected_period)
+                    plot_stock(df, st.session_state.company_name, selected_period)
 
             except Exception as e:
                 st.error(f"주가 데이터를 불러오는 중 오류 발생: {e}")
@@ -154,7 +152,14 @@ def get_intraday_data_bs(ticker):
 
     return df
 
-# ✅ 5. 주가 시각화 함수
+# ✅ 5. FinanceDataReader를 통한 일별 시세 크롤링 함수
+def get_daily_stock_data(ticker, period):
+    end_date = datetime.now().strftime('%Y-%m-%d')
+    start_date = (datetime.now() - timedelta(days=30 if period == "1month" else 365)).strftime('%Y-%m-%d')
+    df = fdr.DataReader(ticker, start_date, end_date)
+    return df
+
+# ✅ 6. 주가 시각화 함수
 def plot_stock(df, company, period):
     if df is None or df.empty:
         st.warning(f"📉 {company} - 해당 기간({period})의 거래 데이터가 없습니다.")
