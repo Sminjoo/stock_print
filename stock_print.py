@@ -7,23 +7,9 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import pandas as pd
 import os
-import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm
+import plotly.graph_objects as go  # ✅ Plotly 추가
 
-# ✅ 1. 한글 폰트 설정
-FONT_PATH = os.path.join(os.path.dirname(__file__), "fonts", "NanumGothic.ttf")
-
-def set_korean_font():
-    if os.path.exists(FONT_PATH):
-        fe = fm.FontEntry(fname=FONT_PATH, name="NanumGothic")
-        fm.fontManager.ttflist.insert(0, fe)
-        plt.rcParams.update({"font.family": "NanumGothic", "axes.unicode_minus": False})
-    else:
-        print("⚠️ 폰트 파일을 찾을 수 없습니다. 'fonts/NanumGothic.ttf' 위치 확인 필요!")
-
-set_korean_font()
-
-# ✅ 2. 최근 거래일 찾기 함수
+# ✅ 1. 최근 거래일 찾기 함수
 def get_recent_trading_day():
     today = datetime.now()
     if today.hour < 9:  # 오전 9시 이전이면 전날을 기준으로
@@ -35,7 +21,7 @@ def get_recent_trading_day():
 
     return today.strftime('%Y-%m-%d')
 
-# ✅ 3. 메인 실행 함수
+# ✅ 2. 메인 실행 함수
 def main():
     st.set_page_config(page_title="Stock Price Visualization", page_icon=":chart_with_upwards_trend:")
     st.title("_주가 시각화_ :chart_with_upwards_trend:")
@@ -82,21 +68,19 @@ def main():
             df = None
             try:
                 if st.session_state.selected_period in ["1day", "week"]:
-                    st.write("⏳ 1일 또는 1주 데이터 가져오는 중...")
                     df = get_intraday_data_bs(ticker, st.session_state.selected_period)
                 else:
-                    st.write("⏳ 1개월 또는 1년 데이터 가져오는 중...")
                     df = get_daily_stock_data(ticker, st.session_state.selected_period)
 
                 if df is None or df.empty:
                     st.warning(f"📉 {st.session_state.company_name} ({ticker}) - 해당 기간({st.session_state.selected_period})의 거래 데이터가 없습니다.")
                 else:
-                    plot_stock(df, st.session_state.company_name, st.session_state.selected_period)
+                    plot_stock_plotly(df, st.session_state.company_name, st.session_state.selected_period)
 
             except Exception as e:
                 st.error(f"주가 데이터를 불러오는 중 오류 발생: {e}")
 
-# ✅ 4. 주가 시각화 & 티커 조회 함수
+# ✅ 3. 주가 시각화 & 티커 조회 함수
 def get_ticker(company):
     try:
         listing = fdr.StockListing('KRX')
@@ -120,7 +104,7 @@ def get_ticker(company):
         st.error(f"티커 조회 중 오류 발생: {e}")
         return None
 
-# ✅ 5. 네이버 금융 시간별 시세 크롤링 함수 (1일/1주)
+# ✅ 4. 네이버 금융 시간별 시세 크롤링 함수 (1일/1주)
 def get_intraday_data_bs(ticker, period):
     base_url = f"https://finance.naver.com/item/sise_time.naver?code={ticker}&page="
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -129,7 +113,7 @@ def get_intraday_data_bs(ticker, period):
     times = []
     page = 1
 
-    recent_trading_day = get_recent_trading_day()  # ✅ 가장 최근 거래일
+    recent_trading_day = get_recent_trading_day()
 
     while True:
         url = base_url + str(page)
@@ -169,30 +153,43 @@ def get_intraday_data_bs(ticker, period):
 
     return df
 
-# ✅ 6. FinanceDataReader를 통한 일별 시세 크롤링 함수 (1개월/1년)
+# ✅ 5. FinanceDataReader를 통한 일별 시세 크롤링 함수 (1개월/1년)
 def get_daily_stock_data(ticker, period):
     end_date = get_recent_trading_day()
     start_date = (datetime.strptime(end_date, '%Y-%m-%d') - timedelta(days=30 if period == "1month" else 365)).strftime('%Y-%m-%d')
     df = fdr.DataReader(ticker, start_date, end_date)
     return df
 
-# ✅ 7. 주가 시각화 함수
-def plot_stock(df, company, period):
+# ✅ 6. Plotly를 이용한 주가 시각화 함수
+def plot_stock_plotly(df, company, period):
     if df is None or df.empty:
         st.warning(f"📉 {company} - 해당 기간({period})의 거래 데이터가 없습니다.")
         return
 
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.plot(df.index, df["Close"], marker="o", linestyle="-", color="b", label="체결가")
-    ax.set_xlabel("시간" if period in ["1day", "week"] else "날짜")
-    ax.set_ylabel("주가 (체결가)")
-    ax.set_title(f"{company} 주가 ({period})")
-    ax.legend()
-    ax.grid()
-    plt.xticks(rotation=45)
+    fig = go.Figure()
 
-    st.pyplot(fig)
+    fig.add_trace(go.Scatter(
+        x=df.index,
+        y=df["Close"],
+        mode="lines+markers",
+        line=dict(color="royalblue", width=2),
+        marker=dict(size=5),
+        name="체결가"
+    ))
+
+    fig.update_layout(
+        title=f"{company} 주가 ({period})",
+        xaxis_title="시간" if period in ["1day", "week"] else "날짜",
+        yaxis_title="주가 (체결가)",
+        template="plotly_white",
+        xaxis=dict(showgrid=True),
+        yaxis=dict(showgrid=True),
+        hovermode="x unified"
+    )
+
+    st.plotly_chart(fig)
 
 # ✅ 실행
 if __name__ == '__main__':
     main()
+
