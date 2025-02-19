@@ -66,7 +66,7 @@ def get_daily_stock_data_fdr(ticker, period):
         df = df.reset_index()
         df = df.rename(columns={"Date": "Date", "Close": "Close"})
 
-        # ✅ **주말 데이터 제거 후 인덱스 재설정**
+        # ✅ **주말 데이터 완전 제거**
         df["Date"] = pd.to_datetime(df["Date"])
         df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)
 
@@ -75,7 +75,7 @@ def get_daily_stock_data_fdr(ticker, period):
         st.error(f"FinanceDataReader 데이터 불러오기 오류: {e}")
         return pd.DataFrame()
 
-# ✅ 5. Plotly를 이용한 주가 시각화 함수 (주말 x축에서 완전히 제거)
+# ✅ 5. Plotly를 이용한 주가 시각화 함수 (주말 x축 완전 제거)
 def plot_stock_plotly(df, company, period):
     if df is None or df.empty:
         st.warning(f"📉 {company} - 해당 기간({period})의 거래 데이터가 없습니다.")
@@ -83,6 +83,8 @@ def plot_stock_plotly(df, company, period):
 
     fig = go.Figure()
 
+    df["Date"] = df["Date"].astype(str)  # ✅ x축을 문자열로 변환 (주말 제거 확실하게)
+    
     if period in ["1day", "week"]:
         fig.add_trace(go.Scatter(
             x=df["Date"],
@@ -107,8 +109,7 @@ def plot_stock_plotly(df, company, period):
         xaxis_title="시간" if period in ["1day", "week"] else "날짜",
         yaxis_title="주가 (KRW)",
         template="plotly_white",
-        xaxis=dict(showgrid=True),
-        yaxis=dict(showgrid=True),
+        xaxis=dict(showgrid=True, type="category"),  # ✅ **x축을 category로 설정하여 주말 완전 제거**
         hovermode="x unified"
     )
 
