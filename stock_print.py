@@ -1,7 +1,7 @@
 import streamlit as st
 import plotly.graph_objects as go
-import yfinance as yf  # ✅ yfinance 추가 (분봉 데이터 가져오기)
 import FinanceDataReader as fdr
+import yfinance as yf
 from datetime import datetime, timedelta
 import pandas as pd
 
@@ -59,7 +59,7 @@ def main():
             df = None
             try:
                 if st.session_state.selected_period in ["1day", "week"]:
-                    df = get_intraday_data_yf(ticker, st.session_state.selected_period)
+                    df = get_intraday_data_yfinance(ticker, st.session_state.selected_period)
                 else:
                     df = get_daily_stock_data(ticker, st.session_state.selected_period)
 
@@ -77,27 +77,33 @@ def get_ticker(company):
         listing = fdr.StockListing('KRX')
         ticker_row = listing[listing["Name"].str.strip() == company.strip()]
         if not ticker_row.empty:
-            return str(ticker_row.iloc[0]["Code"]) + ".KS"  # ✅ yfinance에서는 .KS 추가
+            return str(ticker_row.iloc[0]["Code"]).zfill(6)
         return None
 
     except Exception as e:
         st.error(f"티커 조회 중 오류 발생: {e}")
         return None
 
-# ✅ 4. yfinance를 활용한 분봉 데이터 가져오기
-def get_intraday_data_yf(ticker, period):
-    if period == "1day":
-        df = yf.download(ticker, period="1d", interval="1m")  # ✅ 1일치 1분 봉 데이터
-    else:
-        df = yf.download(ticker, period="5d", interval="5m")  # ✅ 5일치 5분 봉 데이터
+# ✅ 4. yfinance를 활용한 분 단위 시세 (1일/1주)
+def get_intraday_data_yfinance(ticker, period):
+    try:
+        today = get_recent_trading_day()
+        start_date = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=5 if period == "week" else 1)).strftime("%Y-%m-%d")
 
-    if df.empty:
+        # ✅ Yahoo Finance에서 1분 단위 데이터 가져오기
+        df = yf.download(f"{ticker}.KS", start=start_date, end=today, interval="1m")
+
+        if df.empty:
+            return pd.DataFrame()
+
+        df = df.reset_index()
+        df = df.rename(columns={"Datetime": "Date", "Close": "Close"})
+
+        return df
+
+    except Exception as e:
+        st.error(f"분 단위 데이터를 가져오는 중 오류 발생: {e}")
         return pd.DataFrame()
-
-    df = df.reset_index()
-    df = df.rename(columns={"Datetime": "Date", "Close": "Close"})
-
-    return df
 
 # ✅ 5. FinanceDataReader를 통한 일별 시세 (1개월/1년)
 def get_daily_stock_data(ticker, period):
@@ -108,8 +114,11 @@ def get_daily_stock_data(ticker, period):
     if df.empty:
         return pd.DataFrame()
 
-    df = df.reset_index()
+    df = df.reset_index()  # ✅ "Date" 컬럼 추가 (에러 방지)
     df = df.rename(columns={"Date": "Date", "Close": "Close"})
+
+    # ✅ **주말(토요일 & 일요일) 제거**
+    df = df[df["Date"].dt.weekday < 5]
 
     return df
 
@@ -120,20 +129,34 @@ def plot_stock_plotly(df, company, period):
         return
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=df["Date"],
-        y=df["Close"],
-        mode="lines+markers",
-        line=dict(color="royalblue", width=2),
-        marker=dict(size=5),
-        name="체결가"
-    ))
+
+    if period in ["1day", "week"]:
+        fig.add_trace(go.Scatter(
+            x=df["Date"],
+            y=df["Close"],
+            mode="lines+markers",
+            line=dict(color="royalblue", width=2),
+            marker=dict(size=5),
+            name="체결가"
+        ))
+    else:
+        fig.add_trace(go.Candlestick(
+            x=df["Date"],
+            open=df["Open"],
+            high=df["High"],
+            low=df["Low"],
+            close=df["Close"],
+            name="캔들 차트"
+        ))
 
     fig.update_layout(
         title=f"{company} 주가 ({period})",
-        xaxis_title="시간",
+        xaxis_title="시간" if period in ["1day", "week"] else "날짜",
         yaxis_title="주가 (KRW)",
-        template="plotly_white"
+        template="plotly_white",
+        xaxis=dict(showgrid=True),
+        yaxis=dict(showgrid=True),
+        hovermode="x unified"
     )
 
     st.plotly_chart(fig)
