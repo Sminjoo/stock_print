@@ -16,13 +16,16 @@ def get_recent_trading_day():
 
     return today.strftime('%Y-%m-%d')
 
-# ✅ 2. 티커 조회 함수 (FinanceDataReader 활용)
-def get_ticker(company):
+# ✅ 2. 티커 조회 함수 (야후 파이낸스 vs. FinanceDataReader 각각 다르게)
+def get_ticker(company, source="yahoo"):
     try:
         listing = fdr.StockListing('KRX')
         ticker_row = listing[listing["Name"].str.strip() == company.strip()]
         if not ticker_row.empty:
-            return str(ticker_row.iloc[0]["Code"]).zfill(6) + ".KS"  # ✅ 야후 파이낸스 티커 형식 변환
+            krx_ticker = str(ticker_row.iloc[0]["Code"]).zfill(6)
+            if source == "yahoo":
+                return krx_ticker + ".KS"  # 야후 파이낸스용 티커 변환
+            return krx_ticker  # FinanceDataReader용 티커
         return None
 
     except Exception as e:
@@ -42,25 +45,29 @@ def get_intraday_data_yahoo(ticker, period="1d", interval="1m"):
         df = df.rename(columns={"Datetime": "Date", "Close": "Close"})
         return df
     except Exception as e:
-        st.error(f"데이터 불러오기 오류: {e}")
+        st.error(f"야후 파이낸스 데이터 불러오기 오류: {e}")
         return pd.DataFrame()
 
-# ✅ 4. FinanceDataReader를 통한 일별 시세 (1개월/1년)
-def get_daily_stock_data(ticker, period):
-    end_date = get_recent_trading_day()
-    start_date = (datetime.strptime(end_date, '%Y-%m-%d') - timedelta(days=30 if period == "1month" else 365)).strftime('%Y-%m-%d')
-    df = fdr.DataReader(ticker, start_date, end_date)
+# ✅ 4. FinanceDataReader를 통한 일별 시세 (1month, 1year)
+def get_daily_stock_data_fdr(ticker, period):
+    try:
+        end_date = get_recent_trading_day()
+        start_date = (datetime.strptime(end_date, '%Y-%m-%d') - timedelta(days=30 if period == "1month" else 365)).strftime('%Y-%m-%d')
+        df = fdr.DataReader(ticker, start_date, end_date)
 
-    if df.empty:
+        if df.empty:
+            return pd.DataFrame()
+
+        df = df.reset_index()
+        df = df.rename(columns={"Date": "Date", "Close": "Close"})
+
+        # ✅ **주말(토요일 & 일요일) 제거**
+        df = df[df["Date"].dt.weekday < 5]
+
+        return df
+    except Exception as e:
+        st.error(f"FinanceDataReader 데이터 불러오기 오류: {e}")
         return pd.DataFrame()
-
-    df = df.reset_index()
-    df = df.rename(columns={"Date": "Date", "Close": "Close"})
-
-    # ✅ **주말(토요일 & 일요일) 제거**
-    df = df[df["Date"].dt.weekday < 5]
-
-    return df
 
 # ✅ 5. Plotly를 이용한 주가 시각화 함수
 def plot_stock_plotly(df, company, period):
@@ -134,20 +141,22 @@ def main():
         st.write(f"🔍 선택된 기간: {st.session_state.selected_period}")
 
         with st.spinner(f"📊 {st.session_state.company_name} ({st.session_state.selected_period}) 데이터 불러오는 중..."):
-            ticker = get_ticker(st.session_state.company_name)
-            if not ticker:
-                st.error("해당 기업의 티커 코드를 찾을 수 없습니다.")
-                return
+            if selected_period in ["1day", "week"]:
+                ticker = get_ticker(st.session_state.company_name, source="yahoo")  # ✅ 야후 파이낸스용 티커
+                if not ticker:
+                    st.error("해당 기업의 야후 파이낸스 티커 코드를 찾을 수 없습니다.")
+                    return
 
-            st.write(f"✅ 가져온 티커 코드: {ticker}")
+                interval = "1m" if selected_period == "1day" else "5m"
+                df = get_intraday_data_yahoo(ticker, period="5d" if selected_period == "week" else "1d", interval=interval)
 
-            df = None
-
-            if st.session_state.selected_period in ["1day", "week"]:
-                interval = "1m" if st.session_state.selected_period == "1day" else "5m"
-                df = get_intraday_data_yahoo(ticker, period="5d" if st.session_state.selected_period == "week" else "1d", interval=interval)
             else:
-                df = get_daily_stock_data(ticker, st.session_state.selected_period)
+                ticker = get_ticker(st.session_state.company_name, source="fdr")  # ✅ FinanceDataReader용 티커
+                if not ticker:
+                    st.error("해당 기업의 FinanceDataReader 티커 코드를 찾을 수 없습니다.")
+                    return
+
+                df = get_daily_stock_data_fdr(ticker, selected_period)
 
             if df.empty:
                 st.warning(f"📉 {st.session_state.company_name} - 해당 기간({st.session_state.selected_period})의 거래 데이터가 없습니다.")
