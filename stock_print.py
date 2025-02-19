@@ -1,18 +1,16 @@
 import streamlit as st
-import requests
-import time
-import mplfinance as mpf
+import plotly.graph_objects as go
 import FinanceDataReader as fdr
-from bs4 import BeautifulSoup
+from pykrx import stock
 from datetime import datetime, timedelta
 import pandas as pd
-import os
-import plotly.graph_objects as go  # ✅ Plotly 추가
+import requests
+import time
 
 # ✅ 1. 최근 거래일 찾기 함수
 def get_recent_trading_day():
     today = datetime.now()
-    if today.hour < 9:  # 오전 9시 이전이면 전날을 기준으로
+    if today.hour < 9:  # 9시 이전이면 전날을 기준으로
         today -= timedelta(days=1)
 
     # 주말 및 공휴일 고려하여 가장 최근의 거래일 찾기
@@ -68,7 +66,7 @@ def main():
             df = None
             try:
                 if st.session_state.selected_period in ["1day", "week"]:
-                    df = get_intraday_data_bs(ticker, st.session_state.selected_period)
+                    df = get_intraday_data_pykrx(ticker, st.session_state.selected_period)
                 else:
                     df = get_daily_stock_data(ticker, st.session_state.selected_period)
 
@@ -84,76 +82,27 @@ def main():
 def get_ticker(company):
     try:
         listing = fdr.StockListing('KRX')
-        if listing.empty:
-            listing = fdr.StockListing('KOSPI')
-        
-        if listing.empty:
-            st.error("상장 기업 정보를 불러올 수 없습니다.")
-            return None
-
-        for name_col, ticker_col in [("Name", "Code"), ("Name", "Symbol"), ("기업명", "종목코드")]:
-            if name_col in listing.columns and ticker_col in listing.columns:
-                ticker_row = listing[listing[name_col].str.strip() == company.strip()]
-                if not ticker_row.empty:
-                    return str(ticker_row.iloc[0][ticker_col]).zfill(6)
-
-        st.error(f"'{company}'에 해당하는 티커 정보를 찾을 수 없습니다.")
+        ticker_row = listing[listing["Name"].str.strip() == company.strip()]
+        if not ticker_row.empty:
+            return str(ticker_row.iloc[0]["Code"]).zfill(6)
         return None
 
     except Exception as e:
         st.error(f"티커 조회 중 오류 발생: {e}")
         return None
 
-# ✅ 4. 네이버 금융 시간별 시세 크롤링 함수 (1일/1주)
-def get_intraday_data_bs(ticker, period):
-    base_url = f"https://finance.naver.com/item/sise_time.naver?code={ticker}&page="
-    headers = {"User-Agent": "Mozilla/5.0"}
+# ✅ 4. Pykrx를 활용한 시간별 시세 (1일/1주)
+def get_intraday_data_pykrx(ticker, period):
+    today = get_recent_trading_day()
+    start_date = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=6 if period == "week" else 0)).strftime("%Y-%m-%d")
 
-    prices = []
-    times = []
-    page = 1
-
-    recent_trading_day = get_recent_trading_day()
-
-    while True:
-        url = base_url + str(page)
-        res = requests.get(url, headers=headers)
-        time.sleep(1)
-
-        soup = BeautifulSoup(res.text, "html.parser")
-        rows = soup.select("table.type2 tr")
-
-        if not rows or "체결시각" in rows[0].text:
-            break
-
-        for row in rows:
-            cols = row.find_all("td")
-            if len(cols) < 2:
-                continue  
-
-            try:
-                time_str = cols[0].text.strip()
-                close_price = int(cols[1].text.replace(",", ""))
-
-                times.append(time_str)
-                prices.append(close_price)
-
-            except ValueError:
-                continue
-
-        page += 1
-
-    if not prices:
-        return pd.DataFrame()
-
-    df = pd.DataFrame({"Time": times, "Close": prices})
-    df["Date"] = recent_trading_day
-    df["Datetime"] = pd.to_datetime(df["Date"] + " " + df["Time"])
-    df.set_index("Datetime", inplace=True)
+    df = stock.get_market_ohlcv_by_date(fromdate=start_date, todate=today, ticker=ticker)
+    df = df.reset_index()
+    df = df.rename(columns={"날짜": "Date", "시가": "Open", "고가": "High", "저가": "Low", "종가": "Close", "거래량": "Volume"})
 
     return df
 
-# ✅ 5. FinanceDataReader를 통한 일별 시세 크롤링 함수 (1개월/1년)
+# ✅ 5. FinanceDataReader를 통한 일별 시세 (1개월/1년)
 def get_daily_stock_data(ticker, period):
     end_date = get_recent_trading_day()
     start_date = (datetime.strptime(end_date, '%Y-%m-%d') - timedelta(days=30 if period == "1month" else 365)).strftime('%Y-%m-%d')
@@ -168,19 +117,29 @@ def plot_stock_plotly(df, company, period):
 
     fig = go.Figure()
 
-    fig.add_trace(go.Scatter(
-        x=df.index,
-        y=df["Close"],
-        mode="lines+markers",
-        line=dict(color="royalblue", width=2),
-        marker=dict(size=5),
-        name="체결가"
-    ))
+    if period in ["1day", "week"]:
+        fig.add_trace(go.Scatter(
+            x=df["Date"],
+            y=df["Close"],
+            mode="lines+markers",
+            line=dict(color="royalblue", width=2),
+            marker=dict(size=5),
+            name="체결가"
+        ))
+    else:
+        fig.add_trace(go.Candlestick(
+            x=df["Date"],
+            open=df["Open"],
+            high=df["High"],
+            low=df["Low"],
+            close=df["Close"],
+            name="캔들 차트"
+        ))
 
     fig.update_layout(
         title=f"{company} 주가 ({period})",
         xaxis_title="시간" if period in ["1day", "week"] else "날짜",
-        yaxis_title="주가 (체결가)",
+        yaxis_title="주가 (KRW)",
         template="plotly_white",
         xaxis=dict(showgrid=True),
         yaxis=dict(showgrid=True),
@@ -192,4 +151,3 @@ def plot_stock_plotly(df, company, period):
 # ✅ 실행
 if __name__ == '__main__':
     main()
-
