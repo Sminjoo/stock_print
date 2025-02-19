@@ -43,6 +43,11 @@ def get_intraday_data_yahoo(ticker, period="1d", interval="1m"):
 
         df = df.reset_index()
         df = df.rename(columns={"Datetime": "Date", "Close": "Close"})
+
+        # ✅ **주말 데이터 제거 (혹시 남아있는 경우 대비)**
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)
+
         return df
     except Exception as e:
         st.error(f"야후 파이낸스 데이터 불러오기 오류: {e}")
@@ -61,7 +66,8 @@ def get_daily_stock_data_fdr(ticker, period):
         df = df.reset_index()
         df = df.rename(columns={"Date": "Date", "Close": "Close"})
 
-        # ✅ **주말(토요일 & 일요일) 제거하고 x축을 평일 기준으로 변환**
+        # ✅ **주말 데이터 제거 후 인덱스 재설정**
+        df["Date"] = pd.to_datetime(df["Date"])
         df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)
 
         return df
