@@ -89,19 +89,23 @@ def get_ticker(company):
         st.error(f"티커 조회 중 오류 발생: {e}")
         return None
 
-# ✅ 4. Pykrx를 활용한 분 단위 시세 (1일/1주)
+# ✅ 4. Pykrx를 활용한 분 단위 & 일별 시세 (1일/1주)
 def get_intraday_data_pykrx(ticker, period):
     today = get_recent_trading_day()
-    start_date = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=4 if period == "week" else 0)).strftime("%Y-%m-%d")
+    start_date = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=4 if period == "week" else 0)).strftime("%Y%m%d")
 
-    # ✅ 분 단위 데이터 가져오기 (1day 또는 1week)
-    df = stock.get_market_trading_value_by_date(fromdate=start_date, todate=today, ticker=ticker, market="KOSPI")
-    
+    if period == "1day":
+        # ✅ 1일치 분 단위 데이터 가져오기
+        df = stock.get_market_ohlcv_by_date(fromdate=today, todate=today, ticker=ticker, freq="m")  # "m" = 분 단위
+    else:
+        # ✅ 최근 5거래일 일별 시세 가져오기
+        df = stock.get_market_ohlcv_by_date(fromdate=start_date, todate=today, ticker=ticker, freq="d")  # "d" = 일 단위
+
     if df.empty:
         return pd.DataFrame()
 
     df = df.reset_index()
-    df = df.rename(columns={"날짜": "Date", "매도거래량": "Volume", "매도거래대금": "Close"})
+    df = df.rename(columns={"날짜": "Date", "종가": "Close"})
 
     return df
 
@@ -110,6 +114,13 @@ def get_daily_stock_data(ticker, period):
     end_date = get_recent_trading_day()
     start_date = (datetime.strptime(end_date, '%Y-%m-%d') - timedelta(days=30 if period == "1month" else 365)).strftime('%Y-%m-%d')
     df = fdr.DataReader(ticker, start_date, end_date)
+
+    if df.empty:
+        return pd.DataFrame()
+
+    df = df.reset_index()  # ✅ "Date" 컬럼 추가 (에러 방지)
+    df = df.rename(columns={"Date": "Date", "Close": "Close"})
+
     return df
 
 # ✅ 6. Plotly를 이용한 주가 시각화 함수
