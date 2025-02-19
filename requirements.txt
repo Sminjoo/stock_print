@@ -7,3 +7,4 @@ plotly
 datetime
 pykrx
 lxml
+yfinance
