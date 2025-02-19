@@ -4,5 +4,5 @@ pandas
 mplfinance
 finance-datareader
 beautifulsoup4
-matplotlib
 plotly  
+pykrx
