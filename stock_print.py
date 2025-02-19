@@ -4,8 +4,6 @@ import FinanceDataReader as fdr
 from pykrx import stock
 from datetime import datetime, timedelta
 import pandas as pd
-import requests
-import time
 
 # ✅ 1. 최근 거래일 찾기 함수
 def get_recent_trading_day():
@@ -91,14 +89,19 @@ def get_ticker(company):
         st.error(f"티커 조회 중 오류 발생: {e}")
         return None
 
-# ✅ 4. Pykrx를 활용한 시간별 시세 (1일/1주)
+# ✅ 4. Pykrx를 활용한 분 단위 시세 (1일/1주)
 def get_intraday_data_pykrx(ticker, period):
     today = get_recent_trading_day()
-    start_date = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=6 if period == "week" else 0)).strftime("%Y-%m-%d")
+    start_date = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=4 if period == "week" else 0)).strftime("%Y-%m-%d")
 
-    df = stock.get_market_ohlcv_by_date(fromdate=start_date, todate=today, ticker=ticker)
+    # ✅ 분 단위 데이터 가져오기 (1day 또는 1week)
+    df = stock.get_market_trading_value_by_date(fromdate=start_date, todate=today, ticker=ticker, market="KOSPI")
+    
+    if df.empty:
+        return pd.DataFrame()
+
     df = df.reset_index()
-    df = df.rename(columns={"날짜": "Date", "시가": "Open", "고가": "High", "저가": "Low", "종가": "Close", "거래량": "Volume"})
+    df = df.rename(columns={"날짜": "Date", "매도거래량": "Volume", "매도거래대금": "Close"})
 
     return df
 
