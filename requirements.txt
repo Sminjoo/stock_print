@@ -6,3 +6,4 @@ finance-datareader
 beautifulsoup4
 plotly  
 pykrx
+yfinance
