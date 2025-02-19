@@ -95,11 +95,9 @@ def get_intraday_data_pykrx(ticker, period):
     start_date = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=4 if period == "week" else 0)).strftime("%Y%m%d")
 
     if period == "1day":
-        # ✅ 1일치 분 단위 데이터 가져오기
-        df = stock.get_market_ohlcv_by_date(fromdate=today, todate=today, ticker=ticker, freq="m")  # "m" = 분 단위
+        df = stock.get_market_ohlcv_by_date(fromdate=today, todate=today, ticker=ticker, freq="m")
     else:
-        # ✅ 최근 5거래일 일별 시세 가져오기
-        df = stock.get_market_ohlcv_by_date(fromdate=start_date, todate=today, ticker=ticker, freq="d")  # "d" = 일 단위
+        df = stock.get_market_ohlcv_by_date(fromdate=start_date, todate=today, ticker=ticker, freq="d")
 
     if df.empty:
         return pd.DataFrame()
@@ -120,6 +118,9 @@ def get_daily_stock_data(ticker, period):
 
     df = df.reset_index()  # ✅ "Date" 컬럼 추가 (에러 방지)
     df = df.rename(columns={"Date": "Date", "Close": "Close"})
+
+    # ✅ **주말(토요일 & 일요일) 제거**
+    df = df[df["Date"].dt.weekday < 5]
 
     return df
 
