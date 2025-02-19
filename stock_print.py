@@ -1,10 +1,7 @@
 import streamlit as st
-import requests
-import time
-import re
 import plotly.graph_objects as go
+import yfinance as yf
 import FinanceDataReader as fdr
-from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import pandas as pd
 
@@ -19,81 +16,36 @@ def get_recent_trading_day():
 
     return today.strftime('%Y-%m-%d')
 
-# ✅ 2. 네이버 금융에서 'thistime' 값 가져오는 함수
-def get_thistime(ticker):
+# ✅ 2. 티커 조회 함수 (FinanceDataReader 활용)
+def get_ticker(company):
     try:
-        url = f"https://finance.naver.com/item/sise.naver?code={ticker}"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        res = requests.get(url, headers=headers)
-        soup = BeautifulSoup(res.text, "html.parser")
-
-        # ✅ 'iframe'에서 'sise_time' 관련 링크 찾기
-        iframe = soup.find("iframe", {"name": "day"})
-        if iframe:
-            src = iframe["src"]
-            match = re.search(r"thistime=(\d{14})", src)  # YYYYMMDDHHMMSS 형식
-            if match:
-                return match.group(1)  # 정확한 thistime 값 반환
-
+        listing = fdr.StockListing('KRX')
+        ticker_row = listing[listing["Name"].str.strip() == company.strip()]
+        if not ticker_row.empty:
+            return str(ticker_row.iloc[0]["Code"]).zfill(6) + ".KS"  # ✅ 야후 파이낸스 티커 형식 변환
         return None
 
     except Exception as e:
-        st.error(f"❌ 'thistime' 값을 가져오는 중 오류 발생: {e}")
+        st.error(f"티커 조회 중 오류 발생: {e}")
         return None
 
-# ✅ 3. 네이버 금융 시간별 시세 크롤링 함수 (1일/1주)
-def get_intraday_data_naver(ticker, period):
-    thistime = get_thistime(ticker)  # 최신 thistime 값 가져오기
-    if not thistime:
-        st.warning(f"⚠️ {ticker}의 'thistime' 값을 가져올 수 없습니다.")
+# ✅ 3. 야후 파이낸스에서 분봉 데이터 가져오는 함수 (1day, week)
+def get_intraday_data_yahoo(ticker, period="1d", interval="1m"):
+    try:
+        stock = yf.Ticker(ticker)
+        df = stock.history(period=period, interval=interval)
+
+        if df.empty:
+            return pd.DataFrame()
+
+        df = df.reset_index()
+        df = df.rename(columns={"Datetime": "Date", "Close": "Close"})
+        return df
+    except Exception as e:
+        st.error(f"데이터 불러오기 오류: {e}")
         return pd.DataFrame()
 
-    base_url = f"https://finance.naver.com/item/sise_time.naver?code={ticker}&thistime={thistime}&page="
-    headers = {"User-Agent": "Mozilla/5.0"}
-
-    prices = []
-    times = []
-    page = 1
-
-    while True:
-        url = base_url + str(page)
-        res = requests.get(url, headers=headers)
-        time.sleep(1)
-
-        soup = BeautifulSoup(res.text, "html.parser")
-        rows = soup.select("table.type2 tr")
-
-        if not rows or "체결시각" in rows[0].text:
-            break
-
-        for row in rows:
-            cols = row.find_all("td")
-            if len(cols) < 2:
-                continue  
-
-            try:
-                time_str = cols[0].text.strip()
-                close_price = int(cols[1].text.replace(",", ""))
-
-                times.append(time_str)
-                prices.append(close_price)
-
-            except ValueError:
-                continue
-
-        page += 1
-
-    if not prices:
-        return pd.DataFrame()
-
-    df = pd.DataFrame({"Time": times, "Close": prices})
-    df["Date"] = get_recent_trading_day()
-    df["Datetime"] = pd.to_datetime(df["Date"] + " " + df["Time"])
-    df.set_index("Datetime", inplace=True)
-
-    return df
-
-# ✅ 4. FinanceDataReader를 통한 일별 시세 크롤링 함수 (1개월/1년)
+# ✅ 4. FinanceDataReader를 통한 일별 시세 (1개월/1년)
 def get_daily_stock_data(ticker, period):
     end_date = get_recent_trading_day()
     start_date = (datetime.strptime(end_date, '%Y-%m-%d') - timedelta(days=30 if period == "1month" else 365)).strftime('%Y-%m-%d')
@@ -102,7 +54,7 @@ def get_daily_stock_data(ticker, period):
     if df.empty:
         return pd.DataFrame()
 
-    df = df.reset_index()  # ✅ "Date" 컬럼 추가 (에러 방지)
+    df = df.reset_index()
     df = df.rename(columns={"Date": "Date", "Close": "Close"})
 
     # ✅ **주말(토요일 & 일요일) 제거**
@@ -120,7 +72,7 @@ def plot_stock_plotly(df, company, period):
 
     if period in ["1day", "week"]:
         fig.add_trace(go.Scatter(
-            x=df.index,
+            x=df["Date"],
             y=df["Close"],
             mode="lines+markers",
             line=dict(color="royalblue", width=2),
@@ -149,20 +101,7 @@ def plot_stock_plotly(df, company, period):
 
     st.plotly_chart(fig)
 
-# ✅ 6. 주가 시각화 & 티커 조회 함수
-def get_ticker(company):
-    try:
-        listing = fdr.StockListing('KRX')
-        ticker_row = listing[listing["Name"].str.strip() == company.strip()]
-        if not ticker_row.empty:
-            return str(ticker_row.iloc[0]["Code"]).zfill(6)
-        return None
-
-    except Exception as e:
-        st.error(f"티커 조회 중 오류 발생: {e}")
-        return None
-
-# ✅ 7. 메인 실행 함수
+# ✅ 6. Streamlit 메인 실행 함수
 def main():
     st.set_page_config(page_title="Stock Price Visualization", page_icon=":chart_with_upwards_trend:")
     st.title("_주가 시각화_ :chart_with_upwards_trend:")
@@ -192,12 +131,28 @@ def main():
         if selected_period != st.session_state.selected_period:
             st.session_state.selected_period = selected_period
 
+        st.write(f"🔍 선택된 기간: {st.session_state.selected_period}")
+
         with st.spinner(f"📊 {st.session_state.company_name} ({st.session_state.selected_period}) 데이터 불러오는 중..."):
             ticker = get_ticker(st.session_state.company_name)
-            if ticker:
-                df = get_intraday_data_naver(ticker, selected_period) if selected_period in ["1day", "week"] else get_daily_stock_data(ticker, selected_period)
-                if not df.empty:
-                    plot_stock_plotly(df, st.session_state.company_name, selected_period)
+            if not ticker:
+                st.error("해당 기업의 티커 코드를 찾을 수 없습니다.")
+                return
+
+            st.write(f"✅ 가져온 티커 코드: {ticker}")
+
+            df = None
+
+            if st.session_state.selected_period in ["1day", "week"]:
+                interval = "1m" if st.session_state.selected_period == "1day" else "5m"
+                df = get_intraday_data_yahoo(ticker, period="5d" if st.session_state.selected_period == "week" else "1d", interval=interval)
+            else:
+                df = get_daily_stock_data(ticker, st.session_state.selected_period)
+
+            if df.empty:
+                st.warning(f"📉 {st.session_state.company_name} - 해당 기간({st.session_state.selected_period})의 거래 데이터가 없습니다.")
+            else:
+                plot_stock_plotly(df, st.session_state.company_name, st.session_state.selected_period)
 
 # ✅ 실행
 if __name__ == '__main__':
