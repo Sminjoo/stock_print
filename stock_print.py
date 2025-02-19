@@ -11,7 +11,6 @@ def get_recent_trading_day():
     if today.hour < 9:  # 9시 이전이면 전날을 기준으로
         today -= timedelta(days=1)
 
-    # 주말 및 공휴일 고려하여 가장 최근의 거래일 찾기
     while today.weekday() in [5, 6]:  # 토요일(5), 일요일(6)이면 하루씩 감소
         today -= timedelta(days=1)
 
@@ -22,7 +21,6 @@ def main():
     st.set_page_config(page_title="Stock Price Visualization", page_icon=":chart_with_upwards_trend:")
     st.title("_주가 시각화_ :chart_with_upwards_trend:")
 
-    # ✅ 세션 상태 초기화
     if "company_name" not in st.session_state:
         st.session_state.company_name = ""
     if "selected_period" not in st.session_state:
@@ -35,11 +33,9 @@ def main():
     if process and company_name:
         st.session_state.company_name = company_name
 
-    # ✅ 기업명이 입력되었을 경우만 실행
     if st.session_state.company_name:
         st.subheader(f"📈 {st.session_state.company_name} 최근 주가 추이")
 
-        # ✅ 기간 선택 버튼
         selected_period = st.radio(
             "기간 선택",
             options=["1day", "week", "1month", "1year"],
@@ -52,7 +48,6 @@ def main():
 
         st.write(f"🔍 선택된 기간: {st.session_state.selected_period}")
 
-        # ✅ 주가 데이터 가져오기
         with st.spinner(f"📊 {st.session_state.company_name} ({st.session_state.selected_period}) 데이터 불러오는 중..."):
             ticker = get_ticker(st.session_state.company_name)
             if not ticker:
