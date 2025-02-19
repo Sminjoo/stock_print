@@ -61,15 +61,12 @@ def get_daily_stock_data_fdr(ticker, period):
         df = df.reset_index()
         df = df.rename(columns={"Date": "Date", "Close": "Close"})
 
-        # ✅ **주말(토요일 & 일요일) 제거**
-        df = df[df["Date"].dt.weekday < 5]
-
         return df
     except Exception as e:
         st.error(f"FinanceDataReader 데이터 불러오기 오류: {e}")
         return pd.DataFrame()
 
-# ✅ 5. Plotly를 이용한 주가 시각화 함수
+# ✅ 5. Plotly를 이용한 주가 시각화 함수 (주말 부분을 회색 처리)
 def plot_stock_plotly(df, company, period):
     if df is None or df.empty:
         st.warning(f"📉 {company} - 해당 기간({period})의 거래 데이터가 없습니다.")
@@ -86,6 +83,20 @@ def plot_stock_plotly(df, company, period):
             marker=dict(size=5),
             name="체결가"
         ))
+
+        # ✅ 주말 부분을 회색 처리
+        for i in range(len(df) - 1):
+            day_of_week = df["Date"].dt.weekday.iloc[i]
+            if day_of_week in [5, 6]:  # 토요일(5), 일요일(6)
+                fig.add_shape(
+                    type="rect",
+                    x0=df["Date"].iloc[i], x1=df["Date"].iloc[i + 1],
+                    y0=0, y1=1,
+                    xref="x", yref="paper",
+                    fillcolor="rgba(200, 200, 200, 0.3)",
+                    layer="below",
+                    line_width=0,
+                )
     else:
         fig.add_trace(go.Candlestick(
             x=df["Date"],
