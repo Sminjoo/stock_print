@@ -8,3 +8,4 @@ datetime
 lxml
 webdriver-manager
 selenium
+html5lib
