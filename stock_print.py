@@ -176,6 +176,6 @@ def main():
             else:
                 plot_stock_plotly(df, st.session_state.company_name, st.session_state.selected_period)
 
-# ✅ 실행
+# ✅ 실행mmmm
 if __name__ == '__main__':
     main()
