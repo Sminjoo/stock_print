@@ -1,8 +1,6 @@
 streamlit
-requests
-pandas
-finance-datareader
-beautifulsoup4
 plotly
-lxml
-html5lib
+FinanceDataReader
+pandas
+selenium
+webdriver-manager
