@@ -5,7 +5,5 @@ finance-datareader
 beautifulsoup4
 plotly  
 datetime
-pykrx
 lxml
 yfinance
-yahooquery
