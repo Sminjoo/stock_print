@@ -3,11 +3,7 @@ import plotly.graph_objects as go
 import FinanceDataReader as fdr
 from datetime import datetime, timedelta
 import pandas as pd
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from webdriver_manager.chrome import ChromeDriverManager
-import time
+import requests
 
 # ✅ 1. 최근 거래일 찾기 함수
 def get_recent_trading_day():
@@ -32,42 +28,11 @@ def get_ticker(company):
         st.error(f"티커 조회 중 오류 발생: {e}")
         return None
 
-# ✅ 3. 네이버 금융에서 실시간 분봉 데이터 URL 가져오기
-def get_naver_sise_time_url(ticker):
-    base_url = f"https://finance.naver.com/item/sise.naver?code={ticker}"
-
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
-
-    driver.get(base_url)
-    time.sleep(2)
-
-    elements = driver.find_elements(By.TAG_NAME, "a")
-    sise_time_url = None
-
-    for elem in elements:
-        link = elem.get_attribute("href")
-        if link and "sise_time.naver" in link:
-            sise_time_url = link
-            break
-
-    driver.quit()
-    return sise_time_url
-
-# ✅ 4. 네이버 금융에서 분봉 데이터 가져오기
+# ✅ 3. 네이버 금융에서 분봉 데이터 가져오기 (Selenium 제거)
 def get_intraday_data_naver(ticker):
-    sise_time_url = get_naver_sise_time_url(ticker)
-    if not sise_time_url:
-        return pd.DataFrame()
-
+    url = f"https://finance.naver.com/item/sise_time.naver?code={ticker}"
     try:
-        df = pd.read_html(sise_time_url, encoding="euc-kr")[0]
+        df = pd.read_html(url, encoding="euc-kr")[0]
 
         if df.empty:
             return pd.DataFrame()
@@ -80,7 +45,7 @@ def get_intraday_data_naver(ticker):
         st.error(f"네이버 금융 분봉 데이터 가져오기 오류: {e}")
         return pd.DataFrame()
 
-# ✅ 5. FinanceDataReader를 통한 일별 시세 (1month, 1year)
+# ✅ 4. FinanceDataReader를 통한 일별 시세 (1month, 1year)
 def get_daily_stock_data_fdr(ticker, period):
     try:
         end_date = get_recent_trading_day()
@@ -101,7 +66,7 @@ def get_daily_stock_data_fdr(ticker, period):
         st.error(f"FinanceDataReader 데이터 불러오기 오류: {e}")
         return pd.DataFrame()
 
-# ✅ 6. Plotly를 이용한 주가 시각화 함수
+# ✅ 5. Plotly를 이용한 주가 시각화 함수 (X축 수정 없음)
 def plot_stock_plotly(df, company, period):
     if df is None or df.empty:
         st.warning(f"📉 {company} - 해당 기간({period})의 거래 데이터가 없습니다.")
@@ -109,24 +74,14 @@ def plot_stock_plotly(df, company, period):
 
     fig = go.Figure()
 
-    if period in ["1day", "week"]:
-        fig.add_trace(go.Scatter(
-            x=df["Date"],
-            y=df["Close"],
-            mode="lines+markers",
-            line=dict(color="royalblue", width=2),
-            marker=dict(size=5),
-            name="체결가"
-        ))
-    else:
-        fig.add_trace(go.Candlestick(
-            x=df["Date"],
-            open=df["Open"],
-            high=df["High"],
-            low=df["Low"],
-            close=df["Close"],
-            name="캔들 차트"
-        ))
+    fig.add_trace(go.Scatter(
+        x=df["Date"],
+        y=df["Close"],
+        mode="lines+markers",
+        line=dict(color="royalblue", width=2),
+        marker=dict(size=5),
+        name="체결가"
+    ))
 
     fig.update_layout(
         title=f"{company} 주가 ({period})",
@@ -139,7 +94,7 @@ def plot_stock_plotly(df, company, period):
 
     st.plotly_chart(fig)
 
-# ✅ 7. Streamlit 메인 실행 함수
+# ✅ 6. Streamlit 메인 실행 함수
 def main():
     st.set_page_config(page_title="Stock Price Visualization", page_icon=":chart_with_upwards_trend:")
     st.title("_주가 시각화_ :chart_with_upwards_trend:")
