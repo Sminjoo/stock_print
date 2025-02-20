@@ -1,11 +1,13 @@
 import streamlit as st
 import plotly.graph_objects as go
-import yfinance as yf
 import FinanceDataReader as fdr
 from datetime import datetime, timedelta
 import pandas as pd
-import requests
-from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from webdriver_manager.chrome import ChromeDriverManager
+import time
 
 # ✅ 1. 최근 거래일 찾기 함수
 def get_recent_trading_day():
@@ -18,49 +20,49 @@ def get_recent_trading_day():
 
     return today.strftime('%Y-%m-%d')
 
-# ✅ 2. 티커 조회 함수 (야후 & FinanceDataReader)
-def get_ticker(company, source="yahoo"):
+# ✅ 2. 티커 조회 함수 (FinanceDataReader 기반)
+def get_ticker(company):
     try:
         listing = fdr.StockListing('KRX')
         ticker_row = listing[listing["Name"].str.strip() == company.strip()]
         if not ticker_row.empty:
-            krx_ticker = str(ticker_row.iloc[0]["Code"]).zfill(6)
-            if source == "yahoo":
-                return krx_ticker + ".KS"  # ✅ 야후 파이낸스용 티커 변환
-            return krx_ticker  # ✅ FinanceDataReader용 티커
+            return str(ticker_row.iloc[0]["Code"]).zfill(6)
         return None
-
     except Exception as e:
         st.error(f"티커 조회 중 오류 발생: {e}")
         return None
 
-# ✅ 3. 네이버 금융에서 'thistime' 값을 가져오기
+# ✅ 3. Selenium을 이용해 네이버 금융에서 'thistime' 값 가져오기
 def get_thistime_value(ticker):
     url = f"https://finance.naver.com/item/sise.naver?code={ticker}"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    }
 
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless")  # GUI 없이 실행
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
 
-        script_tags = soup.find_all("script")
-        for script in script_tags:
-            if "thistime" in script.text:
-                lines = script.text.split("\n")
-                for line in lines:
-                    if "thistime" in line:
-                        thistime_value = line.split("=")[-1].strip().replace(";", "").replace("'", "")
-                        return thistime_value
-        return None
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
 
-    except requests.exceptions.RequestException as e:
-        st.error(f"❌ 네이버 금융 데이터 요청 실패: {e}")
-        return None
+    driver.get(url)
+    time.sleep(2)  # 페이지 로딩 대기
 
-# ✅ 4. 네이버 금융에서 분봉 데이터 가져오기 (1day, week)
+    # 🔹 'thistime' 값이 포함된 URL 찾기
+    elements = driver.find_elements(By.TAG_NAME, "a")
+    thistime_value = None
+
+    for elem in elements:
+        link = elem.get_attribute("href")
+        if link and "sise_time.naver" in link:
+            thistime_value = link.split("thistime=")[-1]  # 'thistime' 값 추출
+            break
+
+    driver.quit()
+
+    return thistime_value
+
+# ✅ 4. Selenium을 이용해 네이버 금융에서 분봉 데이터 가져오기
 def get_intraday_data_naver(ticker):
     thistime_value = get_thistime_value(ticker)
     if not thistime_value:
@@ -68,32 +70,33 @@ def get_intraday_data_naver(ticker):
         return pd.DataFrame()
 
     url = f"https://finance.naver.com/item/sise_time.naver?code={ticker}&thistime={thistime_value}"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    }
 
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
 
-        table = soup.find("table", class_="type2")
-        if table is None:
-            st.error("❌ 네이버 금융에서 데이터를 찾을 수 없습니다.")
-            return pd.DataFrame()
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
 
-        df = pd.read_html(str(table), encoding="euc-kr")[0]
+    driver.get(url)
+    time.sleep(2)  # 데이터 로딩 대기
 
-        df = df.rename(columns={"체결시간": "Date", "체결가": "Close"})
-        df = df[["Date", "Close"]].dropna()
+    # 🔹 HTML 테이블 데이터 가져오기
+    tables = pd.read_html(driver.page_source, encoding="euc-kr")
+    driver.quit()
 
-        df["Date"] = pd.to_datetime(df["Date"], format="%H:%M").dt.strftime("%H:%M")
-
-        return df
-
-    except requests.exceptions.RequestException as e:
-        st.error(f"❌ 네이버 금융 데이터 요청 실패: {e}")
+    if not tables:
+        st.error("❌ 네이버 금융에서 데이터를 찾을 수 없습니다.")
         return pd.DataFrame()
+
+    df = tables[0]
+    df = df.rename(columns={"체결시간": "Date", "체결가": "Close"})
+    df = df[["Date", "Close"]].dropna()
+    df["Date"] = pd.to_datetime(df["Date"], format="%H:%M").dt.strftime("%H:%M")
+
+    return df
 
 # ✅ 5. FinanceDataReader를 통한 일별 시세 (1month, 1year)
 def get_daily_stock_data_fdr(ticker, period):
@@ -149,7 +152,7 @@ def main():
         st.write(f"🔍 선택된 기간: {st.session_state.selected_period}")
 
         with st.spinner(f"📊 {st.session_state.company_name} ({st.session_state.selected_period}) 데이터 불러오는 중..."):
-            ticker = get_ticker(st.session_state.company_name, source="fdr")  # ✅ 네이버 금융 & FDR 티커 사용
+            ticker = get_ticker(st.session_state.company_name, source="fdr")
             if not ticker:
                 st.error("해당 기업의 티커 코드를 찾을 수 없습니다.")
                 return
