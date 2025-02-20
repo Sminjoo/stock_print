@@ -3,9 +3,6 @@ requests
 pandas
 finance-datareader
 beautifulsoup4
-plotly  
-datetime
+plotly
 lxml
-webdriver-manager
-selenium
 html5lib
