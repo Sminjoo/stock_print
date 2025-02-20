@@ -1,9 +1,9 @@
 import streamlit as st
 import plotly.graph_objects as go
+import yfinance as yf
 import FinanceDataReader as fdr
-import pandas as pd
-from yahooquery import Ticker  # ✅ yahooquery 사용
 from datetime import datetime, timedelta
+import pandas as pd
 
 # ✅ 1. 최근 거래일 찾기 함수
 def get_recent_trading_day():
@@ -23,76 +23,59 @@ def get_ticker(company, source="yahoo"):
         ticker_row = listing[listing["Name"].str.strip() == company.strip()]
         if not ticker_row.empty:
             krx_ticker = str(ticker_row.iloc[0]["Code"]).zfill(6)
-            return f"{krx_ticker}.KS" if source == "yahoo" else krx_ticker
+            if source == "yahoo":
+                return krx_ticker + ".KS"  # ✅ 야후 파이낸스용 티커 변환
+            return krx_ticker  # ✅ FinanceDataReader용 티커
         return None
+
     except Exception as e:
         st.error(f"티커 조회 중 오류 발생: {e}")
         return None
 
-# ✅ 3. YahooQuery를 활용한 빠른 분봉 데이터 가져오기
-@st.cache_data
-def get_intraday_data_yahooquery(ticker, period="1d", interval="1m"):
-    """ YahooQuery를 사용하여 빠르게 주가 데이터를 가져오는 함수 """
+# ✅ 3. 야후 파이낸스에서 분봉 데이터 가져오기 (1day, week)
+def get_intraday_data_yahoo(ticker, period="1d", interval="1m"):
     try:
-        stock = Ticker(ticker)
+        stock = yf.Ticker(ticker)
         df = stock.history(period=period, interval=interval)
 
-        if df.empty or "close" not in df.columns:
+        if df.empty:
             return pd.DataFrame()
 
         df = df.reset_index()
-        df = df.rename(columns={"date": "Date", "close": "Close"})
+        df = df.rename(columns={"Datetime": "Date", "Close": "Close"})
+
+        # ✅ 주말 데이터 제거 (혹시 남아있는 경우 대비)
         df["Date"] = pd.to_datetime(df["Date"])
-        df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)  # ✅ 주말 데이터 제거
+        df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)
 
         return df
     except Exception as e:
-        st.error(f"YahooQuery 데이터 불러오기 오류: {e}")
+        st.error(f"야후 파이낸스 데이터 불러오기 오류: {e}")
         return pd.DataFrame()
 
-# ✅ 4. FinanceDataReader를 통한 일별 시세 (캐싱 + 최신 데이터 업데이트)
-@st.cache_data
-def get_cached_stock_data(ticker):
-    """ 기존 캐시된 1년치 주가 데이터 가져오기 """
-    end_date = get_recent_trading_day()
-    start_date = (datetime.strptime(end_date, '%Y-%m-%d') - timedelta(days=365)).strftime('%Y-%m-%d')
-    df = fdr.DataReader(ticker, start_date, end_date)
+# ✅ 4. FinanceDataReader를 통한 일별 시세 (1month, 1year)
+def get_daily_stock_data_fdr(ticker, period):
+    try:
+        end_date = get_recent_trading_day()
+        start_date = (datetime.strptime(end_date, '%Y-%m-%d') - timedelta(days=30 if period == "1month" else 365)).strftime('%Y-%m-%d')
+        df = fdr.DataReader(ticker, start_date, end_date)
 
-    if df.empty:
+        if df.empty:
+            return pd.DataFrame()
+
+        df = df.reset_index()
+        df = df.rename(columns={"Date": "Date", "Close": "Close"})
+
+        # ✅ 주말 데이터 완전 제거
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)
+
+        return df
+    except Exception as e:
+        st.error(f"FinanceDataReader 데이터 불러오기 오류: {e}")
         return pd.DataFrame()
 
-    df = df.reset_index()
-    df = df.rename(columns={"Date": "Date", "Close": "Close"})
-    df["Date"] = pd.to_datetime(df["Date"])
-
-    return df[df["Date"].dt.weekday < 5].reset_index(drop=True)
-
-def update_stock_data(ticker, cached_df):
-    """ 기존 데이터에 최신 데이터를 추가 """
-    if cached_df.empty:
-        return get_cached_stock_data(ticker)  # 처음 실행하는 경우 전체 데이터 가져옴
-
-    latest_date = cached_df["Date"].max()  # 가장 최근 데이터 날짜
-    today = get_recent_trading_day()  # 오늘 날짜
-
-    if latest_date.strftime('%Y-%m-%d') >= today:  # 이미 최신 데이터 있음
-        return cached_df
-
-    # ✅ 기존 데이터 이후의 최신 데이터만 가져옴
-    new_df = fdr.DataReader(ticker, latest_date.strftime('%Y-%m-%d'), today)
-
-    if new_df.empty:
-        return cached_df  # 추가 데이터 없음
-
-    new_df = new_df.reset_index()
-    new_df = new_df.rename(columns={"Date": "Date", "Close": "Close"})
-    new_df["Date"] = pd.to_datetime(new_df["Date"])
-
-    # ✅ 기존 데이터와 새로운 데이터 합침
-    updated_df = pd.concat([cached_df, new_df]).drop_duplicates(subset=["Date"]).reset_index(drop=True)
-    return updated_df
-
-# ✅ 5. Plotly를 이용한 주가 시각화 함수
+# ✅ 5. Plotly를 이용한 주가 시각화 함수 (x축 포맷 최적화)
 def plot_stock_plotly(df, company, period):
     if df is None or df.empty:
         st.warning(f"📉 {company} - 해당 기간({period})의 거래 데이터가 없습니다.")
@@ -100,9 +83,13 @@ def plot_stock_plotly(df, company, period):
 
     fig = go.Figure()
 
-    df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")  # 기본 날짜 포맷
-    if period in ["1day", "week"]:
-        df["FormattedDate"] = df["Date"].dt.strftime("%H:%M") if period == "1day" else df["Date"].dt.strftime("%m-%d %H:%M")
+    # ✅ x축 날짜 형식 설정
+    if period == "1day":
+        df["FormattedDate"] = df["Date"].dt.strftime("%H:%M")  # ✅ 1day → HH:MM 형식
+    elif period == "week":
+        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d %H:%M")  # ✅ week → MM-DD HH:MM 형식
+    else:
+        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")  # ✅ 1month, 1year → MM-DD 형식
 
     if period in ["1day", "week"]:
         fig.add_trace(go.Scatter(
@@ -168,26 +155,27 @@ def main():
 
         with st.spinner(f"📊 {st.session_state.company_name} ({st.session_state.selected_period}) 데이터 불러오는 중..."):
             if selected_period in ["1day", "week"]:
-                ticker = get_ticker(st.session_state.company_name, source="yahoo")
+                ticker = get_ticker(st.session_state.company_name, source="yahoo")  # ✅ 야후 파이낸스용 티커
                 if not ticker:
                     st.error("해당 기업의 야후 파이낸스 티커 코드를 찾을 수 없습니다.")
                     return
 
                 interval = "1m" if selected_period == "1day" else "5m"
-                df = get_intraday_data_yahooquery(ticker, period="5d" if selected_period == "week" else "1d", interval=interval)
+                df = get_intraday_data_yahoo(ticker, period="5d" if selected_period == "week" else "1d", interval=interval)
+
             else:
-                ticker = get_ticker(st.session_state.company_name, source="fdr")
+                ticker = get_ticker(st.session_state.company_name, source="fdr")  # ✅ FinanceDataReader용 티커
                 if not ticker:
                     st.error("해당 기업의 FinanceDataReader 티커 코드를 찾을 수 없습니다.")
                     return
 
-                cached_df = get_cached_stock_data(ticker)
-                df = update_stock_data(ticker, cached_df)
+                df = get_daily_stock_data_fdr(ticker, selected_period)
 
             if df.empty:
                 st.warning(f"📉 {st.session_state.company_name} - 해당 기간({st.session_state.selected_period})의 거래 데이터가 없습니다.")
             else:
                 plot_stock_plotly(df, st.session_state.company_name, st.session_state.selected_period)
 
+# ✅ 실행
 if __name__ == '__main__':
     main()
