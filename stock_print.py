@@ -1,9 +1,11 @@
 import streamlit as st
 import plotly.graph_objects as go
+import yfinance as yf
 import FinanceDataReader as fdr
 from datetime import datetime, timedelta
 import pandas as pd
 import requests
+from bs4 import BeautifulSoup
 
 # ✅ 1. 최근 거래일 찾기 함수
 def get_recent_trading_day():
@@ -16,36 +18,84 @@ def get_recent_trading_day():
 
     return today.strftime('%Y-%m-%d')
 
-# ✅ 2. 티커 조회 함수 (FinanceDataReader 기반)
-def get_ticker(company):
+# ✅ 2. 티커 조회 함수 (야후 & FinanceDataReader)
+def get_ticker(company, source="yahoo"):
     try:
         listing = fdr.StockListing('KRX')
         ticker_row = listing[listing["Name"].str.strip() == company.strip()]
         if not ticker_row.empty:
-            return str(ticker_row.iloc[0]["Code"]).zfill(6)
+            krx_ticker = str(ticker_row.iloc[0]["Code"]).zfill(6)
+            if source == "yahoo":
+                return krx_ticker + ".KS"  # ✅ 야후 파이낸스용 티커 변환
+            return krx_ticker  # ✅ FinanceDataReader용 티커
         return None
+
     except Exception as e:
         st.error(f"티커 조회 중 오류 발생: {e}")
         return None
 
-# ✅ 3. 네이버 금융에서 분봉 데이터 가져오기 (Selenium 제거)
-def get_intraday_data_naver(ticker):
-    url = f"https://finance.naver.com/item/sise_time.naver?code={ticker}"
-    try:
-        df = pd.read_html(url, encoding="euc-kr")[0]
+# ✅ 3. 네이버 금융에서 'thistime' 값을 가져오기
+def get_thistime_value(ticker):
+    url = f"https://finance.naver.com/item/sise.naver?code={ticker}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
 
-        if df.empty:
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        script_tags = soup.find_all("script")
+        for script in script_tags:
+            if "thistime" in script.text:
+                lines = script.text.split("\n")
+                for line in lines:
+                    if "thistime" in line:
+                        thistime_value = line.split("=")[-1].strip().replace(";", "").replace("'", "")
+                        return thistime_value
+        return None
+
+    except requests.exceptions.RequestException as e:
+        st.error(f"❌ 네이버 금융 데이터 요청 실패: {e}")
+        return None
+
+# ✅ 4. 네이버 금융에서 분봉 데이터 가져오기 (1day, week)
+def get_intraday_data_naver(ticker):
+    thistime_value = get_thistime_value(ticker)
+    if not thistime_value:
+        st.error("❌ 'thistime' 값을 가져오지 못했습니다.")
+        return pd.DataFrame()
+
+    url = f"https://finance.naver.com/item/sise_time.naver?code={ticker}&thistime={thistime_value}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
+
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        table = soup.find("table", class_="type2")
+        if table is None:
+            st.error("❌ 네이버 금융에서 데이터를 찾을 수 없습니다.")
             return pd.DataFrame()
 
+        df = pd.read_html(str(table), encoding="euc-kr")[0]
+
         df = df.rename(columns={"체결시간": "Date", "체결가": "Close"})
+        df = df[["Date", "Close"]].dropna()
+
         df["Date"] = pd.to_datetime(df["Date"], format="%H:%M").dt.strftime("%H:%M")
 
         return df
-    except Exception as e:
-        st.error(f"네이버 금융 분봉 데이터 가져오기 오류: {e}")
+
+    except requests.exceptions.RequestException as e:
+        st.error(f"❌ 네이버 금융 데이터 요청 실패: {e}")
         return pd.DataFrame()
 
-# ✅ 4. FinanceDataReader를 통한 일별 시세 (1month, 1year)
+# ✅ 5. FinanceDataReader를 통한 일별 시세 (1month, 1year)
 def get_daily_stock_data_fdr(ticker, period):
     try:
         end_date = get_recent_trading_day()
@@ -65,34 +115,6 @@ def get_daily_stock_data_fdr(ticker, period):
     except Exception as e:
         st.error(f"FinanceDataReader 데이터 불러오기 오류: {e}")
         return pd.DataFrame()
-
-# ✅ 5. Plotly를 이용한 주가 시각화 함수 (X축 수정 없음)
-def plot_stock_plotly(df, company, period):
-    if df is None or df.empty:
-        st.warning(f"📉 {company} - 해당 기간({period})의 거래 데이터가 없습니다.")
-        return
-
-    fig = go.Figure()
-
-    fig.add_trace(go.Scatter(
-        x=df["Date"],
-        y=df["Close"],
-        mode="lines+markers",
-        line=dict(color="royalblue", width=2),
-        marker=dict(size=5),
-        name="체결가"
-    ))
-
-    fig.update_layout(
-        title=f"{company} 주가 ({period})",
-        xaxis_title="시간" if period in ["1day", "week"] else "날짜",
-        yaxis_title="주가 (KRW)",
-        template="plotly_white",
-        xaxis=dict(showgrid=True, type="category", tickangle=-45),
-        hovermode="x unified"
-    )
-
-    st.plotly_chart(fig)
 
 # ✅ 6. Streamlit 메인 실행 함수
 def main():
@@ -127,7 +149,7 @@ def main():
         st.write(f"🔍 선택된 기간: {st.session_state.selected_period}")
 
         with st.spinner(f"📊 {st.session_state.company_name} ({st.session_state.selected_period}) 데이터 불러오는 중..."):
-            ticker = get_ticker(st.session_state.company_name)
+            ticker = get_ticker(st.session_state.company_name, source="fdr")  # ✅ 네이버 금융 & FDR 티커 사용
             if not ticker:
                 st.error("해당 기업의 티커 코드를 찾을 수 없습니다.")
                 return
