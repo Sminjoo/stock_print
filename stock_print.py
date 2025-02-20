@@ -16,7 +16,7 @@ def get_recent_trading_day():
 
     return today.strftime('%Y-%m-%d')
 
-# ✅ 2. 티커 조회 함수 (야후 & FinanceDataReader)
+# ✅ 2. 티커 조회 함수 (야후 파이낸스 vs. FinanceDataReader 각각 다르게)
 def get_ticker(company, source="yahoo"):
     try:
         listing = fdr.StockListing('KRX')
@@ -24,15 +24,15 @@ def get_ticker(company, source="yahoo"):
         if not ticker_row.empty:
             krx_ticker = str(ticker_row.iloc[0]["Code"]).zfill(6)
             if source == "yahoo":
-                return krx_ticker + ".KS"  # ✅ 야후 파이낸스용 티커 변환
-            return krx_ticker  # ✅ FinanceDataReader용 티커
+                return krx_ticker + ".KS"  # 야후 파이낸스용 티커 변환
+            return krx_ticker  # FinanceDataReader용 티커
         return None
 
     except Exception as e:
         st.error(f"티커 조회 중 오류 발생: {e}")
         return None
 
-# ✅ 3. 야후 파이낸스에서 분봉 데이터 가져오기 (1day, week)
+# ✅ 3. 야후 파이낸스에서 분봉 데이터 가져오는 함수 (1day, week)
 def get_intraday_data_yahoo(ticker, period="1d", interval="1m"):
     try:
         stock = yf.Ticker(ticker)
@@ -43,11 +43,6 @@ def get_intraday_data_yahoo(ticker, period="1d", interval="1m"):
 
         df = df.reset_index()
         df = df.rename(columns={"Datetime": "Date", "Close": "Close"})
-
-        # ✅ 주말 데이터 제거 (혹시 남아있는 경우 대비)
-        df["Date"] = pd.to_datetime(df["Date"])
-        df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)
-
         return df
     except Exception as e:
         st.error(f"야후 파이낸스 데이터 불러오기 오류: {e}")
@@ -66,16 +61,15 @@ def get_daily_stock_data_fdr(ticker, period):
         df = df.reset_index()
         df = df.rename(columns={"Date": "Date", "Close": "Close"})
 
-        # ✅ 주말 데이터 완전 제거
-        df["Date"] = pd.to_datetime(df["Date"])
-        df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)
+        # ✅ **주말(토요일 & 일요일) 제거**
+        df = df[df["Date"].dt.weekday < 5]
 
         return df
     except Exception as e:
         st.error(f"FinanceDataReader 데이터 불러오기 오류: {e}")
         return pd.DataFrame()
 
-# ✅ 5. Plotly를 이용한 주가 시각화 함수 (x축 포맷 최적화)
+# ✅ 5. Plotly를 이용한 주가 시각화 함수
 def plot_stock_plotly(df, company, period):
     if df is None or df.empty:
         st.warning(f"📉 {company} - 해당 기간({period})의 거래 데이터가 없습니다.")
@@ -83,17 +77,9 @@ def plot_stock_plotly(df, company, period):
 
     fig = go.Figure()
 
-    # ✅ x축 날짜 형식 설정
-    if period == "1day":
-        df["FormattedDate"] = df["Date"].dt.strftime("%H:%M")  # ✅ 1day → HH:MM 형식
-    elif period == "week":
-        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d %H:%M")  # ✅ week → MM-DD HH:MM 형식
-    else:
-        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")  # ✅ 1month, 1year → MM-DD 형식
-
     if period in ["1day", "week"]:
         fig.add_trace(go.Scatter(
-            x=df["FormattedDate"],
+            x=df["Date"],
             y=df["Close"],
             mode="lines+markers",
             line=dict(color="royalblue", width=2),
@@ -102,7 +88,7 @@ def plot_stock_plotly(df, company, period):
         ))
     else:
         fig.add_trace(go.Candlestick(
-            x=df["FormattedDate"],
+            x=df["Date"],
             open=df["Open"],
             high=df["High"],
             low=df["Low"],
@@ -112,10 +98,11 @@ def plot_stock_plotly(df, company, period):
 
     fig.update_layout(
         title=f"{company} 주가 ({period})",
-        xaxis_title="시간" if period == "1day" else "날짜",
+        xaxis_title="시간" if period in ["1day", "week"] else "날짜",
         yaxis_title="주가 (KRW)",
         template="plotly_white",
-        xaxis=dict(showgrid=True, type="category", tickangle=-45),
+        xaxis=dict(showgrid=True),
+        yaxis=dict(showgrid=True),
         hovermode="x unified"
     )
 
