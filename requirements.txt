@@ -6,4 +6,5 @@ beautifulsoup4
 plotly  
 datetime
 lxml
-yfinance
+webdriver-manager
+selenium
