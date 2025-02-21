@@ -2,5 +2,6 @@ streamlit
 plotly
 finance-datareader
 pandas
+yfinance 
 selenium
 webdriver-manager
