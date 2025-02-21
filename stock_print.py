@@ -1,18 +1,14 @@
 import streamlit as st
 import plotly.graph_objects as go
+import yfinance as yf
 import FinanceDataReader as fdr
 from datetime import datetime, timedelta
 import pandas as pd
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from webdriver_manager.chrome import ChromeDriverManager
-import time
 
 # ✅ 1. 최근 거래일 찾기 함수
 def get_recent_trading_day():
     today = datetime.now()
-    if today.hour < 9:
+    if today.hour < 9:  # 9시 이전이면 전날을 기준으로
         today -= timedelta(days=1)
 
     while today.weekday() in [5, 6]:  # 토요일(5), 일요일(6)이면 하루씩 감소
@@ -20,85 +16,44 @@ def get_recent_trading_day():
 
     return today.strftime('%Y-%m-%d')
 
-# ✅ 2. 티커 조회 함수 (FinanceDataReader 기반)
-def get_ticker(company):
+# ✅ 2. 티커 조회 함수 (야후 & FinanceDataReader)
+def get_ticker(company, source="yahoo"):
     try:
         listing = fdr.StockListing('KRX')
         ticker_row = listing[listing["Name"].str.strip() == company.strip()]
         if not ticker_row.empty:
-            return str(ticker_row.iloc[0]["Code"]).zfill(6)
+            krx_ticker = str(ticker_row.iloc[0]["Code"]).zfill(6)
+            if source == "yahoo":
+                return krx_ticker + ".KS"  # ✅ 야후 파이낸스용 티커 변환
+            return krx_ticker  # ✅ FinanceDataReader용 티커
         return None
+
     except Exception as e:
         st.error(f"티커 조회 중 오류 발생: {e}")
         return None
 
-# ✅ 3. Selenium을 이용해 네이버 금융에서 'thistime' 값 가져오기
-def get_thistime_value(ticker):
-    url = f"https://finance.naver.com/item/sise.naver?code={ticker}"
+# ✅ 3. 야후 파이낸스에서 분봉 데이터 가져오기 (1day, week)
+def get_intraday_data_yahoo(ticker, period="1d", interval="1m"):
+    try:
+        stock = yf.Ticker(ticker)
+        df = stock.history(period=period, interval=interval)
 
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless")  # GUI 없이 실행
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
+        if df.empty:
+            return pd.DataFrame()
 
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
+        df = df.reset_index()
+        df = df.rename(columns={"Datetime": "Date", "Close": "Close"})
 
-    driver.get(url)
-    time.sleep(2)  # 페이지 로딩 대기
+        # ✅ 주말 데이터 제거 (혹시 남아있는 경우 대비)
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)
 
-    # 🔹 'thistime' 값이 포함된 URL 찾기
-    elements = driver.find_elements(By.TAG_NAME, "a")
-    thistime_value = None
-
-    for elem in elements:
-        link = elem.get_attribute("href")
-        if link and "sise_time.naver" in link:
-            thistime_value = link.split("thistime=")[-1]  # 'thistime' 값 추출
-            break
-
-    driver.quit()
-
-    return thistime_value
-
-# ✅ 4. Selenium을 이용해 네이버 금융에서 분봉 데이터 가져오기
-def get_intraday_data_naver(ticker):
-    thistime_value = get_thistime_value(ticker)
-    if not thistime_value:
-        st.error("❌ 'thistime' 값을 가져오지 못했습니다.")
+        return df
+    except Exception as e:
+        st.error(f"야후 파이낸스 데이터 불러오기 오류: {e}")
         return pd.DataFrame()
 
-    url = f"https://finance.naver.com/item/sise_time.naver?code={ticker}&thistime={thistime_value}"
-
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
-
-    driver.get(url)
-    time.sleep(2)  # 데이터 로딩 대기
-
-    # 🔹 HTML 테이블 데이터 가져오기
-    tables = pd.read_html(driver.page_source, encoding="euc-kr")
-    driver.quit()
-
-    if not tables:
-        st.error("❌ 네이버 금융에서 데이터를 찾을 수 없습니다.")
-        return pd.DataFrame()
-
-    df = tables[0]
-    df = df.rename(columns={"체결시간": "Date", "체결가": "Close"})
-    df = df[["Date", "Close"]].dropna()
-    df["Date"] = pd.to_datetime(df["Date"], format="%H:%M").dt.strftime("%H:%M")
-
-    return df
-
-# ✅ 5. FinanceDataReader를 통한 일별 시세 (1month, 1year)
+# ✅ 4. FinanceDataReader를 통한 일별 시세 (1month, 1year)
 def get_daily_stock_data_fdr(ticker, period):
     try:
         end_date = get_recent_trading_day()
@@ -111,6 +66,7 @@ def get_daily_stock_data_fdr(ticker, period):
         df = df.reset_index()
         df = df.rename(columns={"Date": "Date", "Close": "Close"})
 
+        # ✅ 주말 데이터 완전 제거
         df["Date"] = pd.to_datetime(df["Date"])
         df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)
 
@@ -118,6 +74,52 @@ def get_daily_stock_data_fdr(ticker, period):
     except Exception as e:
         st.error(f"FinanceDataReader 데이터 불러오기 오류: {e}")
         return pd.DataFrame()
+
+# ✅ 5. Plotly를 이용한 주가 시각화 함수 (x축 포맷 최적화)
+def plot_stock_plotly(df, company, period):
+    if df is None or df.empty:
+        st.warning(f"📉 {company} - 해당 기간({period})의 거래 데이터가 없습니다.")
+        return
+
+    fig = go.Figure()
+
+    # ✅ x축 날짜 형식 설정
+    if period == "1day":
+        df["FormattedDate"] = df["Date"].dt.strftime("%H:%M")  # ✅ 1day → HH:MM 형식
+    elif period == "week":
+        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d %H:%M")  # ✅ week → MM-DD HH:MM 형식
+    else:
+        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")  # ✅ 1month, 1year → MM-DD 형식
+
+    if period in ["1day", "week"]:
+        fig.add_trace(go.Scatter(
+            x=df["FormattedDate"],
+            y=df["Close"],
+            mode="lines+markers",
+            line=dict(color="royalblue", width=2),
+            marker=dict(size=5),
+            name="체결가"
+        ))
+    else:
+        fig.add_trace(go.Candlestick(
+            x=df["FormattedDate"],
+            open=df["Open"],
+            high=df["High"],
+            low=df["Low"],
+            close=df["Close"],
+            name="캔들 차트"
+        ))
+
+    fig.update_layout(
+        title=f"{company} 주가 ({period})",
+        xaxis_title="시간" if period == "1day" else "날짜",
+        yaxis_title="주가 (KRW)",
+        template="plotly_white",
+        xaxis=dict(showgrid=True, type="category", tickangle=-45),
+        hovermode="x unified"
+    )
+
+    st.plotly_chart(fig)
 
 # ✅ 6. Streamlit 메인 실행 함수
 def main():
@@ -152,14 +154,21 @@ def main():
         st.write(f"🔍 선택된 기간: {st.session_state.selected_period}")
 
         with st.spinner(f"📊 {st.session_state.company_name} ({st.session_state.selected_period}) 데이터 불러오는 중..."):
-            ticker = get_ticker(st.session_state.company_name, source="fdr")
-            if not ticker:
-                st.error("해당 기업의 티커 코드를 찾을 수 없습니다.")
-                return
-
             if selected_period in ["1day", "week"]:
-                df = get_intraday_data_naver(ticker)
+                ticker = get_ticker(st.session_state.company_name, source="yahoo")  # ✅ 야후 파이낸스용 티커
+                if not ticker:
+                    st.error("해당 기업의 야후 파이낸스 티커 코드를 찾을 수 없습니다.")
+                    return
+
+                interval = "1m" if selected_period == "1day" else "5m"
+                df = get_intraday_data_yahoo(ticker, period="5d" if selected_period == "week" else "1d", interval=interval)
+
             else:
+                ticker = get_ticker(st.session_state.company_name, source="fdr")  # ✅ FinanceDataReader용 티커
+                if not ticker:
+                    st.error("해당 기업의 FinanceDataReader 티커 코드를 찾을 수 없습니다.")
+                    return
+
                 df = get_daily_stock_data_fdr(ticker, selected_period)
 
             if df.empty:
