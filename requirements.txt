@@ -1,6 +1,6 @@
 streamlit
 plotly
-FinanceDataReader
+finance-datareader
 pandas
 selenium
 webdriver-manager
