@@ -1,5 +1,6 @@
 import os
 import time
+import requests
 import streamlit as st
 import plotly.graph_objects as go
 import FinanceDataReader as fdr
@@ -10,8 +11,24 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 
-# ✅ ChromeDriver 실행 경로 (Streamlit 프로젝트 내 chromedriver 폴더)
-CHROMEDRIVER_PATH = os.path.join(os.getcwd(), "chromedriver-win64", "chromedriver.exe")
+# ✅ GitHub에서 ChromeDriver 자동 다운로드 설정
+CHROMEDRIVER_URL = "https://raw.githubusercontent.com/사용자이름/저장소이름/main/chromedriver-win64/chromedriver.exe"
+CHROMEDRIVER_PATH = os.path.join(os.getcwd(), "chromedriver.exe")
+
+# ✅ ChromeDriver 자동 다운로드 함수
+def download_chromedriver():
+    if not os.path.exists(CHROMEDRIVER_PATH):  # 파일이 없을 때만 다운로드
+        print("🔽 ChromeDriver를 다운로드 중...")
+        response = requests.get(CHROMEDRIVER_URL, stream=True)
+        with open(CHROMEDRIVER_PATH, "wb") as file:
+            for chunk in response.iter_content(chunk_size=1024):
+                if chunk:
+                    file.write(chunk)
+        print("✅ ChromeDriver 다운로드 완료!")
+        os.chmod(CHROMEDRIVER_PATH, 0o755)  # 실행 권한 추가 (Mac/Linux용)
+
+# ✅ 실행 시 ChromeDriver가 없으면 자동 다운로드
+download_chromedriver()
 
 # ✅ 최근 거래일 찾기
 def get_recent_trading_day():
@@ -175,7 +192,7 @@ def main():
                 df = get_daily_stock_data_fdr(ticker, selected_period)
 
             if df.empty:
-                st.warning(f"📉 {st.session_state.company_name} - 해당 기간({selected_period})의 거래 데이터가 없습니다.")
+                st.warning(f"📉 {st.session_state.company_name} - 데이터 없음")
             else:
                 plot_stock_plotly(df, st.session_state.company_name, selected_period)
 
