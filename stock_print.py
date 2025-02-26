@@ -39,9 +39,7 @@ def get_intraday_data_yahoo(ticker, period="1d", interval="1m"):
         if df.empty:
             return pd.DataFrame()
         df = df.reset_index()
-        df = df.rename(columns={"Datetime": "Date", "Close": "Close",
-                                "Open": "Open", "High": "High", "Low": "Low"})
-        df["Date"] = pd.to_datetime(df["Date"])
+        df["Date"] = pd.to_datetime(df["Datetime"])  # ✅ 원본 데이터 유지
         df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)  # ✅ 주말 제거
         return df
     except Exception as e:
@@ -57,7 +55,7 @@ def get_daily_stock_data_fdr(ticker, period):
         if df.empty:
             return pd.DataFrame()
         df = df.reset_index()
-        df["Date"] = pd.to_datetime(df["Date"])
+        df["Date"] = pd.to_datetime(df["Date"])  # ✅ 원본 데이터 유지
         df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)  # ✅ 주말 제거
         return df
     except Exception as e:
@@ -72,20 +70,20 @@ def plot_stock_plotly(df, company, period):
 
     fig = go.Figure()
 
-    # ✅ X축 레이블 설정 (글씨 최소화)
+    # ✅ X축 레이블 설정 (글씨 최소화, 원본 데이터 유지)
     if period == "1day":
-        df["FormattedDate"] = df["Date"].dt.strftime("%H:%M")  # 1시간 단위
-        tickvals = df["FormattedDate"][::60]  # 60분 단위로 표시
+        tickformat = "%H:%M"  # 1시간 단위
+        hoverformat = "%Y-%m-%d %H:%M"
     elif period in ["week", "1month"]:
-        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")  # 월-일 단위
-        tickvals = df["FormattedDate"][::5]  # 5일 간격으로 표시
+        tickformat = "%m-%d"  # 날짜만 표시
+        hoverformat = "%Y-%m-%d"  # 마우스 오버 시 날짜까지만
     else:  # 1year
-        df["FormattedDate"] = df["Date"].dt.strftime("%Y-%m")  # 월 단위
-        tickvals = df["FormattedDate"][::1]  # 모든 달 표시
+        tickformat = "%Y-%m"  # 연-월 표시
+        hoverformat = "%Y-%m-%d"  # 마우스 오버 시 날짜까지 표시
 
-    # ✅ 캔들 차트 추가
+    # ✅ 캔들 차트 추가 (데이터 변형 없이 원본 사용)
     fig.add_trace(go.Candlestick(
-        x=df["FormattedDate"],  # ✅ category 타입 유지
+        x=df["Date"],  # ✅ 원본 날짜 컬럼 사용
         open=df["Open"],
         high=df["High"],
         low=df["Low"],
@@ -101,8 +99,9 @@ def plot_stock_plotly(df, company, period):
         xaxis=dict(
             showgrid=True, 
             type="category",  # ✅ category 타입 유지 → 빈 공간 없이 연속적으로 표시
-            tickvals=tickvals,  # ✅ X축 레이블 최소화
-            tickangle=-45
+            tickformat=tickformat,  # ✅ X축 레이블 최소화
+            tickangle=-45,
+            hoverformat=hoverformat  # ✅ 마우스 오버 시 날짜·시간 표시
         ),
         hovermode="x unified"
     )
