@@ -65,7 +65,7 @@ def get_daily_stock_data_fdr(ticker, period):
         st.error(f"FinanceDataReader 데이터 불러오기 오류: {e}")
         return pd.DataFrame()
 
-# ✅ 5. Plotly를 이용한 주가 시각화 함수 (X축 표시 최적화)
+# ✅ 5. Plotly를 이용한 주가 시각화 함수 (X축 간격 최적화)
 def plot_stock_plotly(df, company, period):
     if df is None or df.empty:
         st.warning(f"📉 {company} - 해당 기간({period})의 거래 데이터가 없습니다.")
@@ -73,19 +73,19 @@ def plot_stock_plotly(df, company, period):
 
     fig = go.Figure()
 
-    # ✅ X축 표시 포맷 설정
+    # ✅ x축 날짜 형식 설정
     if period == "1day":
         df["FormattedDate"] = df["Date"].dt.strftime("%H:%M")
         tickmode = "linear"
         dtick = 60  # 60분(1시간) 간격 표시
-    elif period in ["week", "1month"]:
+    elif period == "week":
+        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d %H:%M")
+        tickmode = "linear"
+        dtick = 6 * 60  # 6시간 간격 표시
+    else:
         df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")
         tickmode = "array"
-        df = df.iloc[::4]  # ✅ 4일 간격으로 X축 레이블 표시
-    else:  # 1year
-        df["FormattedDate"] = df["Date"].dt.strftime("%m")
-        tickmode = "array"
-        df = df[df["Date"].dt.is_month_start]  # ✅ 월 시작 날짜만 표시
+        dtick = None  # 날짜 몇 개만 표시
 
     # ✅ 모든 기간(1day, week, 1month, 1year)에서 캔들 차트 적용
     fig.add_trace(go.Candlestick(
@@ -99,10 +99,10 @@ def plot_stock_plotly(df, company, period):
 
     fig.update_layout(
         title=f"{company} 주가 ({period})",
-        xaxis_title="시간" if period == "1day" else "날짜",
+        xaxis_title="시간" if period in ["1day", "week"] else "날짜",
         yaxis_title="주가 (KRW)",
         template="plotly_white",
-        xaxis=dict(showgrid=True, type="category", tickmode=tickmode, tickangle=-45),
+        xaxis=dict(showgrid=True, type="category", tickmode=tickmode, dtick=dtick, tickangle=-45),
         hovermode="x unified",
         xaxis_rangeslider_visible=False  # ✅ X축 줌 슬라이더 제거
     )
