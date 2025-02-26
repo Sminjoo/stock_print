@@ -57,7 +57,6 @@ def get_daily_stock_data_fdr(ticker, period):
         if df.empty:
             return pd.DataFrame()
         df = df.reset_index()
-        df = df.rename(columns={"Date": "Date", "Close": "Close"})
         df["Date"] = pd.to_datetime(df["Date"])
         df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)  # 주말 제거
         return df
@@ -73,26 +72,17 @@ def plot_stock_plotly(df, company, period):
 
     fig = go.Figure()
 
-    # ✅ x축 날짜 형식 설정
+    # ✅ X축 설정 (데이터 원본 유지)
     if period == "1day":
-        df["FormattedDate"] = df["Date"].dt.strftime("%H:%M")
-        tickmode = "linear"
-        dtick = 3600000  # 1시간(3600000ms) 간격
-        tickformat = "%H:%M"
+        tickformat = "%H:%M"  # 1시간 단위
     elif period in ["week", "1month"]:
-        df["FormattedDate"] = df["Date"].dt.strftime("%Y-%m-%d")
-        tickmode = "auto"
-        dtick = None  # 자동 간격 조정
-        tickformat = "%a %m-%d"  # 요일 + 월-일 형식
+        tickformat = "%a %m-%d"  # 요일 + 월-일
     else:  # 1year
-        df["FormattedDate"] = df["Date"].dt.strftime("%Y-%m")
-        tickmode = "auto"
-        dtick = None
-        tickformat = "%Y-%m"  # 연-월 형식
+        tickformat = "%Y-%m"  # 연-월
 
     # ✅ 모든 기간(1day, week, 1month, 1year)에서 캔들 차트 적용
     fig.add_trace(go.Candlestick(
-        x=df["FormattedDate"],
+        x=df["Date"],  # ✅ 원본 데이터 사용
         open=df["Open"],
         high=df["High"],
         low=df["Low"],
@@ -105,7 +95,12 @@ def plot_stock_plotly(df, company, period):
         xaxis_title="시간" if period == "1day" else "날짜",
         yaxis_title="주가 (KRW)",
         template="plotly_white",
-        xaxis=dict(showgrid=True, type="category", tickmode=tickmode, dtick=dtick, tickformat=tickformat, tickangle=-45),
+        xaxis=dict(
+            showgrid=True, 
+            type="date",  # ✅ 날짜 타입 유지
+            tickformat=tickformat, 
+            tickangle=-45
+        ),
         hovermode="x unified"
     )
 
