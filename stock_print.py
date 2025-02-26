@@ -95,9 +95,8 @@ def plot_stock_plotly(df, company, period):
         fig.add_trace(go.Scatter(
             x=df["FormattedDate"],
             y=df["Close"],
-            mode="lines+markers",
+            mode="lines",  # ✅ 동그란 점 제거 (선만 표시)
             line=dict(color="royalblue", width=2),
-            marker=dict(size=5),
             name="체결가"
         ))
     else:
