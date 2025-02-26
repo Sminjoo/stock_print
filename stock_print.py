@@ -14,7 +14,7 @@ def get_recent_trading_day():
     today = datetime.now()
     if today.hour < 9:
         today -= timedelta(days=1)
-    while today.weekday() in [5, 6]:  # 주말(토, 일) 제외
+    while today.weekday() in [5, 6]:  # 토요일(5), 일요일(6) 제외
         today -= timedelta(days=1)
     return today.strftime('%Y-%m-%d')
 
@@ -72,17 +72,20 @@ def plot_stock_plotly(df, company, period):
 
     fig = go.Figure()
 
-    # ✅ X축 레이블 간결화
+    # ✅ X축 레이블 설정 (글씨 최소화)
     if period == "1day":
         df["FormattedDate"] = df["Date"].dt.strftime("%H:%M")  # 1시간 단위
+        tickvals = df["FormattedDate"][::60]  # 60분 단위로 표시
     elif period in ["week", "1month"]:
-        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")  # 날짜만 표시
+        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")  # 월-일 단위
+        tickvals = df["FormattedDate"][::5]  # 5일 간격으로 표시
     else:  # 1year
         df["FormattedDate"] = df["Date"].dt.strftime("%Y-%m")  # 월 단위
+        tickvals = df["FormattedDate"][::1]  # 모든 달 표시
 
     # ✅ 캔들 차트 추가
     fig.add_trace(go.Candlestick(
-        x=df["FormattedDate"],  # ✅ category 타입을 유지하기 위해 문자열 변환
+        x=df["FormattedDate"],  # ✅ category 타입 유지
         open=df["Open"],
         high=df["High"],
         low=df["Low"],
@@ -97,7 +100,8 @@ def plot_stock_plotly(df, company, period):
         template="plotly_white",
         xaxis=dict(
             showgrid=True, 
-            type="category",  # ✅ X축을 category로 설정 → 빈 공간 없이 연속적으로 표시
+            type="category",  # ✅ category 타입 유지 → 빈 공간 없이 연속적으로 표시
+            tickvals=tickvals,  # ✅ X축 레이블 최소화
             tickangle=-45
         ),
         hovermode="x unified"
