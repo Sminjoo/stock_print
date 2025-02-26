@@ -14,7 +14,7 @@ def get_recent_trading_day():
     today = datetime.now()
     if today.hour < 9:
         today -= timedelta(days=1)
-    while today.weekday() in [5, 6]:  # 주말(토, 일) 제외
+    while today.weekday() in [5, 6]:  # 토요일(5), 일요일(6) 제외
         today -= timedelta(days=1)
     return today.strftime('%Y-%m-%d')
 
@@ -42,7 +42,7 @@ def get_intraday_data_yahoo(ticker, period="1d", interval="1m"):
         df = df.rename(columns={"Datetime": "Date", "Close": "Close",
                                 "Open": "Open", "High": "High", "Low": "Low"})
         df["Date"] = pd.to_datetime(df["Date"])
-        df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)  # 주말 제거
+        df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)  # 주말 데이터 제거
         return df
     except Exception as e:
         st.error(f"야후 파이낸스 데이터 불러오기 오류: {e}")
@@ -57,6 +57,7 @@ def get_daily_stock_data_fdr(ticker, period):
         if df.empty:
             return pd.DataFrame()
         df = df.reset_index()
+        df = df.rename(columns={"Date": "Date", "Close": "Close"})
         df["Date"] = pd.to_datetime(df["Date"])
         df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)  # 주말 제거
         return df
@@ -64,7 +65,7 @@ def get_daily_stock_data_fdr(ticker, period):
         st.error(f"FinanceDataReader 데이터 불러오기 오류: {e}")
         return pd.DataFrame()
 
-# ✅ 5. Plotly를 이용한 주가 시각화 함수 (X축 간결하게 변경)
+# ✅ 5. Plotly를 이용한 주가 시각화 함수 (1day & week도 캔들 차트 적용)
 def plot_stock_plotly(df, company, period):
     if df is None or df.empty:
         st.warning(f"📉 {company} - 해당 기간({period})의 거래 데이터가 없습니다.")
@@ -72,23 +73,17 @@ def plot_stock_plotly(df, company, period):
 
     fig = go.Figure()
 
-    # ✅ X축 레이블 간결화
+    # ✅ x축 날짜 형식 설정
     if period == "1day":
-        tickformat = "%H:%M"  # 1시간 단위
-        hoverformat = "%Y-%m-%d %H:%M"
+        df["FormattedDate"] = df["Date"].dt.strftime("%H:%M")
     elif period == "week":
-        tickformat = "%m-%d"  # 날짜만 표시
-        hoverformat = "%Y-%m-%d %H:%M"  # 마우스 오버 시 날짜 + 시간
-    elif period == "1month":
-        tickformat = "%m-%d"  # 날짜만 표시
-        hoverformat = "%Y-%m-%d"  # 마우스 오버 시 날짜까지만
-    else:  # 1year
-        tickformat = "%Y-%m"  # 월 단위
-        hoverformat = "%Y-%m-%d"  # 마우스 오버 시 날짜까지 표시
+        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d %H:%M")
+    else:
+        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")
 
-    # ✅ 캔들 차트 추가
+    # ✅ 모든 기간(1day, week, 1month, 1year)에서 캔들 차트 적용
     fig.add_trace(go.Candlestick(
-        x=df["Date"],
+        x=df["FormattedDate"],
         open=df["Open"],
         high=df["High"],
         low=df["Low"],
@@ -101,13 +96,7 @@ def plot_stock_plotly(df, company, period):
         xaxis_title="시간" if period == "1day" else "날짜",
         yaxis_title="주가 (KRW)",
         template="plotly_white",
-        xaxis=dict(
-            showgrid=True, 
-            type="date",
-            tickformat=tickformat, 
-            tickangle=-45,
-            hoverformat=hoverformat  # ✅ 마우스 오버 시 날짜·시간 표시
-        ),
+        xaxis=dict(showgrid=True, type="category", tickangle=-45),
         hovermode="x unified"
     )
 
