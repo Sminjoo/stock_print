@@ -42,7 +42,8 @@ def get_intraday_data_yahoo(ticker, period="1d", interval="1m"):
             return pd.DataFrame()
 
         df = df.reset_index()
-        df = df.rename(columns={"Datetime": "Date", "Close": "Close"})
+        df = df.rename(columns={"Datetime": "Date", "Close": "Close", 
+                                "Open": "Open", "High": "High", "Low": "Low"})  # ✅ 캔들차트에 필요한 데이터 포함
 
         # ✅ 주말 데이터 제거 (혹시 남아있는 경우 대비)
         df["Date"] = pd.to_datetime(df["Date"])
@@ -75,7 +76,7 @@ def get_daily_stock_data_fdr(ticker, period):
         st.error(f"FinanceDataReader 데이터 불러오기 오류: {e}")
         return pd.DataFrame()
 
-# ✅ 5. Plotly를 이용한 주가 시각화 함수 (x축 포맷 최적화)
+# ✅ 5. Plotly를 이용한 주가 시각화 함수 (캔들 차트 적용)
 def plot_stock_plotly(df, company, period):
     if df is None or df.empty:
         st.warning(f"📉 {company} - 해당 기간({period})의 거래 데이터가 없습니다.")
@@ -91,23 +92,15 @@ def plot_stock_plotly(df, company, period):
     else:
         df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")  # ✅ 1month, 1year → MM-DD 형식
 
-    if period in ["1day", "week"]:
-        fig.add_trace(go.Scatter(
-            x=df["FormattedDate"],
-            y=df["Close"],
-            mode="lines",  # ✅ 동그란 점 제거 (선만 표시)
-            line=dict(color="royalblue", width=2),
-            name="체결가"
-        ))
-    else:
-        fig.add_trace(go.Candlestick(
-            x=df["FormattedDate"],
-            open=df["Open"],
-            high=df["High"],
-            low=df["Low"],
-            close=df["Close"],
-            name="캔들 차트"
-        ))
+    # ✅ 1day 및 week 데이터도 캔들차트로 표시
+    fig.add_trace(go.Candlestick(
+        x=df["FormattedDate"],
+        open=df["Open"],
+        high=df["High"],
+        low=df["Low"],
+        close=df["Close"],
+        name="캔들 차트"
+    ))
 
     fig.update_layout(
         title=f"{company} 주가 ({period})",
