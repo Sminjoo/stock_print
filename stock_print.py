@@ -57,6 +57,7 @@ def get_daily_stock_data_fdr(ticker, period):
         if df.empty:
             return pd.DataFrame()
         df = df.reset_index()
+        df = df.rename(columns={"Date": "Date", "Close": "Close"})
         df["Date"] = pd.to_datetime(df["Date"])
         df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)  # 주말 제거
         return df
@@ -72,17 +73,17 @@ def plot_stock_plotly(df, company, period):
 
     fig = go.Figure()
 
-    # ✅ X축 설정 (데이터 원본 유지)
+    # ✅ X축 레이블 설정 (데이터는 그대로 유지)
     if period == "1day":
         tickformat = "%H:%M"  # 1시간 단위
     elif period in ["week", "1month"]:
-        tickformat = "%a %m-%d"  # 요일 + 월-일
+        tickformat = "%a %m-%d"  # 요일 + 날짜
     else:  # 1year
         tickformat = "%Y-%m"  # 연-월
 
-    # ✅ 모든 기간(1day, week, 1month, 1year)에서 캔들 차트 적용
+    # ✅ 캔들 차트 추가 (데이터 변경 없음)
     fig.add_trace(go.Candlestick(
-        x=df["Date"],  # ✅ 원본 데이터 사용
+        x=df["Date"],  # ✅ 원본 데이터 그대로 사용
         open=df["Open"],
         high=df["High"],
         low=df["Low"],
