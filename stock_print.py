@@ -64,7 +64,7 @@ def get_daily_stock_data_fdr(ticker, period):
         st.error(f"FinanceDataReader 데이터 불러오기 오류: {e}")
         return pd.DataFrame()
 
-# ✅ 5. Plotly를 이용한 주가 시각화 함수 (X축 최적화)
+# ✅ 5. Plotly를 이용한 주가 시각화 함수 (X축 연속 유지)
 def plot_stock_plotly(df, company, period):
     if df is None or df.empty:
         st.warning(f"📉 {company} - 해당 기간({period})의 거래 데이터가 없습니다.")
@@ -72,15 +72,15 @@ def plot_stock_plotly(df, company, period):
 
     fig = go.Figure()
 
-    # ✅ X축 레이블 설정
+    # ✅ X축 설정 (주말 제거 후 연속적으로 표시)
     if period == "1day":
         tickformat = "%H:%M"  # 1시간 단위
         hoverformat = "%Y-%m-%d %H:%M"
     elif period == "week":
-        tickformat = "%a %m-%d"  # 요일 + 날짜
+        tickformat = "%m-%d"  # 날짜만 표시
         hoverformat = "%Y-%m-%d %H:%M"  # 마우스 오버 시 날짜 + 시간
     elif period == "1month":
-        tickformat = "%a %m-%d"  # 요일 + 날짜
+        tickformat = "%m-%d"  # 날짜만 표시
         hoverformat = "%Y-%m-%d"  # 마우스 오버 시 날짜까지만
     else:  # 1year
         tickformat = "%Y-%m"  # 월 단위
