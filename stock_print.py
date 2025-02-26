@@ -72,14 +72,21 @@ def plot_stock_plotly(df, company, period):
 
     # ✅ X축 레이블 설정 (글씨 최소화, 원본 데이터 유지)
     if period == "1day":
-        tickformat = "%H:%M"  # 1시간 단위
-        hoverformat = "%Y-%m-%d %H:%M"
-    elif period in ["week", "1month"]:
-        tickformat = "%m-%d"  # 날짜만 표시
-        hoverformat = "%Y-%m-%d"  # 마우스 오버 시 날짜까지만
+        df["FormattedDate"] = df["Date"].dt.strftime("%H:%M")  # 1시간 단위
+        tickvals = df["FormattedDate"][::60]  # 60분 간격으로 표시
+        hoverformat = "%m-%d %H:%M"  # 마우스 오버 시 월-일 시간
+    elif period == "week":
+        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")  # 하루 단위
+        tickvals = df["FormattedDate"][::1]  # 하루 간격으로 표시
+        hoverformat = "%m-%d %H:%M"  # 마우스 오버 시 월-일 시간
+    elif period == "1month":
+        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")  # 4일 단위
+        tickvals = df["FormattedDate"][::4]  # 4일 간격으로 표시
+        hoverformat = "%m-%d"  # 마우스 오버 시 월-일
     else:  # 1year
-        tickformat = "%Y-%m"  # 연-월 표시
-        hoverformat = "%Y-%m-%d"  # 마우스 오버 시 날짜까지 표시
+        df["FormattedDate"] = df["Date"].dt.strftime("%m")  # 월 단위
+        tickvals = df["FormattedDate"].unique()  # 모든 월 표시
+        hoverformat = "%Y-%m-%d"  # 마우스 오버 시 연-월-일
 
     # ✅ 캔들 차트 추가 (데이터 변형 없이 원본 사용)
     fig.add_trace(go.Candlestick(
@@ -99,7 +106,7 @@ def plot_stock_plotly(df, company, period):
         xaxis=dict(
             showgrid=True, 
             type="category",  # ✅ category 타입 유지 → 빈 공간 없이 연속적으로 표시
-            tickformat=tickformat,  # ✅ X축 레이블 최소화
+            tickvals=tickvals,  # ✅ X축 레이블 최소화
             tickangle=-45,
             hoverformat=hoverformat  # ✅ 마우스 오버 시 날짜·시간 표시
         ),
