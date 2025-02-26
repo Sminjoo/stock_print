@@ -74,18 +74,11 @@ def plot_stock_plotly(df, company, period):
     fig = go.Figure()
 
     # ✅ x축 날짜 형식 설정
-    if period == "1day":
-        df["FormattedDate"] = df["Date"].dt.strftime("%H:%M")
-        tickmode = "linear"
-        dtick = 60  # 60분(1시간) 간격 표시
-    elif period == "week":
-        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d %H:%M")
-        tickmode = "linear"
-        dtick = 6 * 60  # 6시간 간격 표시
-    else:
-        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")
-        tickmode = "array"
-        dtick = None  # 날짜 몇 개만 표시
+    df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")
+
+    # ✅ 4일 간격으로만 x축 표시하는 설정 추가
+    if period in ["week", "1month"]:
+        df = df.iloc[::4]  # 4일 간격으로 샘플링하여 x축에 표시
 
     # ✅ 모든 기간(1day, week, 1month, 1year)에서 캔들 차트 적용
     fig.add_trace(go.Candlestick(
@@ -99,10 +92,10 @@ def plot_stock_plotly(df, company, period):
 
     fig.update_layout(
         title=f"{company} 주가 ({period})",
-        xaxis_title="시간" if period in ["1day", "week"] else "날짜",
+        xaxis_title="시간" if period == "1day" else "날짜",
         yaxis_title="주가 (KRW)",
         template="plotly_white",
-        xaxis=dict(showgrid=True, type="category", tickmode=tickmode, dtick=dtick, tickangle=-45),
+        xaxis=dict(showgrid=True, type="category", tickangle=-45),
         hovermode="x unified",
         xaxis_rangeslider_visible=False  # ✅ X축 줌 슬라이더 제거
     )
