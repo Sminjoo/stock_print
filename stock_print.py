@@ -82,10 +82,10 @@ def plot_stock_plotly(df, company, period):
         tickvals = df[df["FormattedDate"].str.endswith("09:00")]["FormattedDate"].tolist()  # 9시만 표시
     elif period == "1month":
         df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")
-        tickvals = df[df["Date"].dt.day % 4 == 0]["FormattedDate"].tolist()  # 4일 간격
+        tickvals = df[df["Date"].dt.day % 4 == 0]["FormattedDate"].tolist()  # 정확히 4일 간격
     else:  # "1year"
-        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")
-        tickvals = df[df["Date"].dt.is_month_end]["FormattedDate"].tolist()  # 1달 간격
+        df["FormattedDate"] = df["Date"].dt.strftime("%Y-%m-%d")
+        tickvals = df[df["Date"].dt.day == df["Date"].dt.day.min()]["FormattedDate"].tolist()  # 매월 같은 날짜 선택 (ex. 02-28, 03-28, ...)
 
     # ✅ 모든 기간(1day, week, 1month, 1year)에서 캔들 차트 적용
     fig.add_trace(go.Candlestick(
