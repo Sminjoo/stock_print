@@ -81,18 +81,29 @@ def plot_stock_plotly(df, company, period):
     else:
         df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")
 
-    # ✅ x축 간격 설정 및 월별 첫 거래일 찾기
+    # ✅ x축 간격 설정
     if period == "1day":
         tickvals = df.iloc[::60]["FormattedDate"].tolist()  # 1시간 간격
     elif period == "week":
         tickvals = df[df["FormattedDate"].str.endswith("09:00")]["FormattedDate"].tolist()  # 9시만 표시
     elif period == "1month":
         tickvals = df.iloc[::4]["FormattedDate"].tolist()  # 4일 간격
-    else:  # 1year - 정확히 월별로 표시
-        # 각 월의 첫 거래일을 찾기
-        df['Month'] = df['Date'].dt.to_period('M')
-        monthly_first_days = df.groupby('Month').first()
-        tickvals = monthly_first_days["FormattedDate"].tolist()
+    else:  # 1year - 매월 1일 또는 1일에 가장 가까운 거래일 찾기
+        # 각 월의 1일 또는 그 이후 첫 거래일 찾기
+        df['Year'] = df['Date'].dt.year
+        df['Month'] = df['Date'].dt.month
+        df['Day'] = df['Date'].dt.day
+        
+        # 각 월의 첫 거래일 찾기 (1일 또는 그 이후 가장 가까운 날)
+        monthly_data = []
+        for (year, month), group in df.groupby(['Year', 'Month']):
+            # 해당 월의 데이터 중 날짜가 가장 작은 것 선택
+            first_day = group.nsmallest(1, 'Day').iloc[0]
+            monthly_data.append(first_day)
+        
+        # 최종 tickvals 계산
+        monthly_df = pd.DataFrame(monthly_data)
+        tickvals = monthly_df["FormattedDate"].tolist()
 
     # ✅ 모든 기간(1day, week, 1month, 1year)에서 캔들 차트 적용
     fig.add_trace(go.Candlestick(
@@ -109,7 +120,14 @@ def plot_stock_plotly(df, company, period):
         xaxis_title="시간" if period == "1day" else "날짜",
         yaxis_title="주가 (KRW)",
         template="plotly_white",
-        xaxis=dict(showgrid=True, type="category", tickmode='array', tickvals=tickvals, tickangle=-45),
+        xaxis=dict(
+            showgrid=True, 
+            type="category", 
+            tickmode='array', 
+            tickvals=tickvals, 
+            tickangle=-45,
+            automargin=True  # 라벨이 겹치지 않도록 자동 여백 설정
+        ),
         hovermode="x unified"
     )
 
