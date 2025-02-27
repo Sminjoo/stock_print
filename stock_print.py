@@ -74,18 +74,19 @@ def plot_stock_plotly(df, company, period):
     fig = go.Figure()
 
     # ✅ x축 날짜 형식 및 간격 설정
+    if period in ["1day", "week"]:
+        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d %H:%M")  # MM-DD HH:MM 형식
+    else:  # "1month", "1year"
+        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")  # MM-DD 형식 유지
+
     if period == "1day":
-        df["FormattedDate"] = df["Date"].dt.strftime("%H:%M")
         tickvals = df.iloc[::60]["FormattedDate"].tolist()  # 1시간 간격
     elif period == "week":
-        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d %H:%M")
-        tickvals = df[df["FormattedDate"].str.endswith("09:00")]["FormattedDate"].tolist()  # 9시만 표시
+        tickvals = df[df["FormattedDate"].str.endswith("09:00")]["FormattedDate"].tolist()  # 09:00만 표시
     elif period == "1month":
-        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")
         tickvals = df.iloc[::4]["FormattedDate"].tolist()  # 4일 간격
-    else:  # "1year"
-        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")
-        tickvals = df[df["Date"].dt.is_month_start]["FormattedDate"].tolist()  # 1달 간격 (월 초)
+    elif period == "1year":
+        tickvals = df[df["Date"].dt.is_month_start]["FormattedDate"].tolist()  # 월 초 (1달 간격)
 
     # ✅ 모든 기간(1day, week, 1month, 1year)에서 캔들 차트 적용
     fig.add_trace(go.Candlestick(
