@@ -45,7 +45,7 @@ def get_intraday_data_yahoo(ticker, period="1d", interval="1m"):
         df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)  # 주말 데이터 제거
         
         # ✅ 3시 30분까지 데이터 포함하도록 필터 적용
-        df = df[df["Date"].dt.time <= datetime.strptime("15:30", "%H:%M").time()]
+        df = df[df["Date"].dt.time <= datetime.strptime("15:30:00", "%H:%M:%S").time()]
         
         return df
     except Exception as e:
@@ -69,6 +69,47 @@ def get_daily_stock_data_fdr(ticker, period):
         st.error(f"FinanceDataReader 데이터 불러오기 오류: {e}")
         return pd.DataFrame()
 
+# ✅ 5. Plotly를 이용한 주가 시각화 함수 (1day & week도 캔들 차트 적용)
+def plot_stock_plotly(df, company, period):
+    if df is None or df.empty:
+        st.warning(f"📉 {company} - 해당 기간({period})의 거래 데이터가 없습니다.")
+        return
+
+    fig = go.Figure()
+
+    # ✅ x축 날짜 형식 설정
+    if period == "1day":
+        df["FormattedDate"] = df["Date"].dt.strftime("%H:%M")
+    elif period == "week":
+        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d %H:%M")
+    else:
+        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")
+
+    # ✅ 모든 기간(1day, week, 1month, 1year)에서 캔들 차트 적용
+    fig.add_trace(go.Candlestick(
+        x=df["FormattedDate"],
+        open=df["Open"],
+        high=df["High"],
+        low=df["Low"],
+        close=df["Close"],
+        name="캔들 차트"
+    ))
+
+    fig.update_layout(
+        title=f"{company} 주가 ({period})",
+        xaxis_title="시간" if period == "1day" else "날짜",
+        yaxis_title="주가 (KRW)",
+        template="plotly_white",
+        xaxis=dict(showgrid=True, type="category", tickangle=-45),
+        hovermode="x unified"
+    )
+
+    st.plotly_chart(fig)
+
 # ✅ 실행
+def main():
+    st.title("Stock Data Viewer")
+    st.write("Welcome to the stock data visualization app.")
+
 if __name__ == '__main__':
     main()
