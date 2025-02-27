@@ -65,7 +65,7 @@ def get_daily_stock_data_fdr(ticker, period):
         st.error(f"FinanceDataReader 데이터 불러오기 오류: {e}")
         return pd.DataFrame()
 
-# ✅ 5. Plotly를 이용한 주가 시각화 함수 (1day & week도 캔들 차트 적용)
+# ✅ 5. Plotly를 이용한 주가 시각화 함수 (x축 간격 조정)
 def plot_stock_plotly(df, company, period):
     if df is None or df.empty:
         st.warning(f"📉 {company} - 해당 기간({period})의 거래 데이터가 없습니다.")
@@ -73,13 +73,19 @@ def plot_stock_plotly(df, company, period):
 
     fig = go.Figure()
 
-    # ✅ x축 날짜 형식 설정
+    # ✅ x축 날짜 형식 및 간격 설정
     if period == "1day":
         df["FormattedDate"] = df["Date"].dt.strftime("%H:%M")
+        tickvals = df.iloc[::60]["FormattedDate"].tolist()  # 1시간 간격
     elif period == "week":
         df["FormattedDate"] = df["Date"].dt.strftime("%m-%d %H:%M")
-    else:
+        tickvals = df[df["FormattedDate"].str.endswith("09:00")]["FormattedDate"].tolist()  # 9시만 표시
+    elif period == "1month":
         df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")
+        tickvals = df[df["Date"].dt.day % 4 == 0]["FormattedDate"].tolist()  # 정확히 4일 간격
+    else:  # "1year"
+        df["FormattedDate"] = df["Date"].dt.strftime("%m-%d")  # 연도 제외
+        tickvals = df[df["Date"].dt.is_month_start]["FormattedDate"].tolist()  # 매월 1일만 표시
 
     # ✅ 모든 기간(1day, week, 1month, 1year)에서 캔들 차트 적용
     fig.add_trace(go.Candlestick(
@@ -96,7 +102,7 @@ def plot_stock_plotly(df, company, period):
         xaxis_title="시간" if period == "1day" else "날짜",
         yaxis_title="주가 (KRW)",
         template="plotly_white",
-        xaxis=dict(showgrid=True, type="category", tickangle=-45),
+        xaxis=dict(showgrid=True, tickmode='array', tickvals=tickvals, tickangle=-45),
         hovermode="x unified"
     )
 
