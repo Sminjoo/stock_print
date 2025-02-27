@@ -81,7 +81,7 @@ def plot_stock_plotly(df, company, period):
     elif period == "week":
         tickvals = df[df["Date"].dt.hour == 9]["FormattedDate"].tolist()  # 하루 중 9시 데이터만 선택
     elif period == "1month":
-        tickvals = df[df["Date"].dt.day % 4 == 0]["FormattedDate"].tolist()  # 4일 간격
+        tickvals = df.iloc[::4]["FormattedDate"].tolist()  # 4일 간격
     else:  # "1year"
         tickvals = df[df["Date"].dt.is_month_start]["FormattedDate"].tolist()  # 1달 간격 (월 초)
 
