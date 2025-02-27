@@ -106,10 +106,60 @@ def plot_stock_plotly(df, company, period):
 
     st.plotly_chart(fig)
 
-# ✅ 실행
+# ✅ 6. Streamlit 메인 실행 함수
 def main():
-    st.title("Stock Data Viewer")
-    st.write("Welcome to the stock data visualization app.")
+    st.set_page_config(page_title="Stock Price Visualization", page_icon=":chart_with_upwards_trend:")
+    st.title("_주가 시각화_ :chart_with_upwards_trend:")
 
+    if "company_name" not in st.session_state:
+        st.session_state.company_name = ""
+    if "selected_period" not in st.session_state:
+        st.session_state.selected_period = "1day"
+
+    with st.sidebar:
+        company_name = st.text_input("분석할 기업명 (코스피 상장)", st.session_state.company_name)
+        process = st.button("검색")
+
+    if process and company_name:
+        st.session_state.company_name = company_name
+
+    if st.session_state.company_name:
+        st.subheader(f"📈 {st.session_state.company_name} 최근 주가 추이")
+        
+        st.session_state.radio_selection = st.session_state.selected_period
+        selected_period = st.radio(
+            "기간 선택",
+            options=["1day", "week", "1month", "1year"],
+            index=["1day", "week", "1month", "1year"].index(st.session_state.selected_period),
+            key="radio_selection",
+            on_change=update_period
+        )
+
+        st.write(f"🔍 선택된 기간: {st.session_state.selected_period}")
+
+        with st.spinner(f"📊 {st.session_state.company_name} ({st.session_state.selected_period}) 데이터 불러오는 중..."):
+            if st.session_state.selected_period in ["1day", "week"]:
+                ticker = get_ticker(st.session_state.company_name, source="yahoo")
+                if not ticker:
+                    st.error("해당 기업의 야후 파이낸스 티커 코드를 찾을 수 없습니다.")
+                    return
+
+                interval = "1m" if st.session_state.selected_period == "1day" else "5m"
+                df = get_intraday_data_yahoo(ticker, period="5d" if st.session_state.selected_period == "week" else "1d", interval=interval)
+
+            else:
+                ticker = get_ticker(st.session_state.company_name, source="fdr")
+                if not ticker:
+                    st.error("해당 기업의 FinanceDataReader 티커 코드를 찾을 수 없습니다.")
+                    return
+
+                df = get_daily_stock_data_fdr(ticker, st.session_state.selected_period)
+
+            if df.empty:
+                st.warning(f"📉 {st.session_state.company_name} - 해당 기간({st.session_state.selected_period})의 거래 데이터가 없습니다.")
+            else:
+                plot_stock_plotly(df, st.session_state.company_name, st.session_state.selected_period)
+
+# ✅ 실행
 if __name__ == '__main__':
     main()
