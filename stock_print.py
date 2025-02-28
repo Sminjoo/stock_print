@@ -33,7 +33,7 @@ def get_ticker(company):
 
 # ✅ 3. 네이버 금융에서 분봉 데이터 가져오기 (1day, week)
 def get_intraday_data_naver(ticker):
-    today = datetime.now().strftime('%Y%m%d')  # 오늘 날짜 (YYYYMMDD 형식)
+    today = datetime.now().strftime('%Y%m%d')
     url_template = f"https://finance.naver.com/item/sise_time.naver?code={ticker}&thistime={today}333333&page={{}}"
     all_data = []
     page = 1
@@ -69,7 +69,7 @@ def get_intraday_data_naver(ticker):
     
     df = pd.DataFrame(all_data, columns=['Time', 'Price'])
     df['Time'] = pd.to_datetime(df['Time'], format='%H:%M').dt.strftime('%H:%M')
-    df = df.iloc[::-1].reset_index(drop=True)  # 시간순 정렬
+    df = df.iloc[::-1].reset_index(drop=True)
     return df
 
 # ✅ 4. FinanceDataReader를 통한 일별 시세 (1month, 1year)
@@ -83,7 +83,7 @@ def get_daily_stock_data_fdr(ticker, period):
         df = df.reset_index()
         df = df.rename(columns={"Date": "Date", "Close": "Close"})
         df["Date"] = pd.to_datetime(df["Date"])
-        df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)  # 주말 제거
+        df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)
         return df
     except Exception as e:
         st.error(f"FinanceDataReader 데이터 불러오기 오류: {e}")
@@ -99,7 +99,7 @@ def plot_stock_plotly(df, company, period):
 
     # ✅ x축 날짜 형식 설정
     if period == "1day":
-        df["FormattedDate"] = df["Date"].dt.strftime("%H:%M")
+        df["FormattedDate"] = df["Time"]
     elif period == "week":
         df["FormattedDate"] = df["Date"].dt.strftime("%m-%d %H:%M")
     else:
@@ -107,36 +107,30 @@ def plot_stock_plotly(df, company, period):
 
     # ✅ x축 간격 설정
     if period == "1day":
-        tickvals = df.iloc[::60]["FormattedDate"].tolist()  # 1시간 간격
+        tickvals = df.iloc[::60]["FormattedDate"].tolist()
     elif period == "week":
-        tickvals = df[df["FormattedDate"].str.endswith("09:00")]["FormattedDate"].tolist()  # 9시만 표시
+        tickvals = df[df["FormattedDate"].str.endswith("09:00")]["FormattedDate"].tolist()
     elif period == "1month":
-        tickvals = df.iloc[::4]["FormattedDate"].tolist()  # 4일 간격
-    else:  # 1year - 첫 달은 건너뛰고 나머지 월만 표시
+        tickvals = df.iloc[::4]["FormattedDate"].tolist()
+    else:
         df['Year'] = df['Date'].dt.year
         df['Month'] = df['Date'].dt.month
-        
-        # 첫 번째 월 구하기
         first_month = df['Month'].iloc[0]
         first_year = df['Year'].iloc[0]
         
-        # 각 월의 첫 거래일 찾기 (첫 번째 월은 제외)
         monthly_data = []
         for (year, month), group in df.groupby(['Year', 'Month']):
             if year == first_year and month == first_month:
                 continue
-                
             first_day = group.iloc[0]
             monthly_data.append(first_day)
         
-        # ✅ 최종 tickvals 계산 (빠진 부분 복구)
         if monthly_data:
             monthly_df = pd.DataFrame(monthly_data)
             tickvals = monthly_df["FormattedDate"].tolist()
         else:
             tickvals = []
 
-    # ✅ 모든 기간(1day, week, 1month, 1year)에서 캔들 차트 적용
     fig.add_trace(go.Candlestick(
         x=df["FormattedDate"],
         open=df["Open"],
@@ -183,34 +177,26 @@ def main():
     if st.session_state.company_name:
         st.subheader(f"📈 {st.session_state.company_name} 최근 주가 추이")
 
-        # ✅ 선택된 기간을 강제 업데이트하여 즉시 반영
         st.session_state.radio_selection = st.session_state.selected_period
         selected_period = st.radio(
             "기간 선택",
             options=["1day", "week", "1month", "1year"],
             index=["1day", "week", "1month", "1year"].index(st.session_state.selected_period),
             key="radio_selection",
-            on_change=update_period  # ✅ 선택 즉시 반영
+            on_change=update_period
         )
 
         st.write(f"🔍 선택된 기간: {st.session_state.selected_period}")
 
         with st.spinner(f"📊 {st.session_state.company_name} ({st.session_state.selected_period}) 데이터 불러오는 중..."):
+            ticker = get_ticker(st.session_state.company_name)
+            if not ticker:
+                st.error("해당 기업의 티커 코드를 찾을 수 없습니다.")
+                return
+
             if st.session_state.selected_period in ["1day", "week"]:
-                ticker = get_ticker(st.session_state.company_name, source="yahoo")
-                if not ticker:
-                    st.error("해당 기업의 야후 파이낸스 티커 코드를 찾을 수 없습니다.")
-                    return
-
-                interval = "1m" if st.session_state.selected_period == "1day" else "5m"
-                df = get_intraday_data_yahoo(ticker, period="5d" if st.session_state.selected_period == "week" else "1d", interval=interval)
-
+                df = get_intraday_data_naver(ticker)
             else:
-                ticker = get_ticker(st.session_state.company_name, source="fdr")
-                if not ticker:
-                    st.error("해당 기업의 FinanceDataReader 티커 코드를 찾을 수 없습니다.")
-                    return
-
                 df = get_daily_stock_data_fdr(ticker, st.session_state.selected_period)
 
             if df.empty:
