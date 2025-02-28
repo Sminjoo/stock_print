@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+import time
 
 # ✅ 세션 상태 업데이트 함수 (기간 변경 시 즉시 반영)
 def update_period():
@@ -41,13 +42,18 @@ def get_intraday_data_naver(ticker):
     while True:
         url = url_template.format(page)
         response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+        
+        if response.status_code != 200:
+            st.error(f"네이버 금융 데이터 요청 실패 (페이지 {page})")
+            break
+        
         soup = BeautifulSoup(response.text, 'html.parser')
         table = soup.find('table', {'class': 'type2'})
         
         if not table:
-            break
+            break  # 데이터가 없으면 종료
         
-        rows = table.find_all('tr')[2:]
+        rows = table.find_all('tr')[2:]  # 첫 번째 행(컬럼명) 제외
         page_data = []
         
         for row in rows:
@@ -62,16 +68,26 @@ def get_intraday_data_naver(ticker):
                 page_data.append([time, int(price)])
         
         if not page_data:
-            break
+            break  # 더 이상 데이터가 없으면 크롤링 종료
         
         all_data.extend(page_data)
+        
+        # ✅ 9:00 데이터가 포함되면 즉시 종료
+        if any(data[0] == "09:00" for data in page_data):
+            break
+        
         page += 1
-    
-    df = pd.DataFrame(all_data, columns=['Time', 'Price'])
-    df['Time'] = pd.to_datetime(df['Time'], format='%H:%M').dt.strftime('%H:%M')
-    df = df.iloc[::-1].reset_index(drop=True)
-    return df
+        time.sleep(0.5)  # 서버 부하 방지를 위한 짧은 딜레이
 
+    df = pd.DataFrame(all_data, columns=['Time', 'Price'])
+    
+    # ✅ 9:00 이후 데이터만 필터링
+    df = df[df["Time"] >= "09:00"]
+
+    df['Time'] = pd.to_datetime(df['Time'], format='%H:%M').dt.strftime('%H:%M')
+    df = df.iloc[::-1].reset_index(drop=True)  # 시간순 정렬
+    return df
+    
 # ✅ 4. FinanceDataReader를 통한 일별 시세 (1month, 1year)
 def get_daily_stock_data_fdr(ticker, period):
     try:
