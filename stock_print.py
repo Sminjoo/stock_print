@@ -38,8 +38,9 @@ def get_intraday_data_naver(ticker):
     url_template = f"https://finance.naver.com/item/sise_time.naver?code={ticker}&thistime={today}333333&page={{}}"
     all_data = []
     page = 1
-    
-    while True:
+    max_pages = 40  # ✅ 최대 40페이지까지만 크롤링
+
+    while page <= max_pages:
         url = url_template.format(page)
         response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
         
@@ -71,23 +72,23 @@ def get_intraday_data_naver(ticker):
             break  # 더 이상 데이터가 없으면 크롤링 종료
         
         all_data.extend(page_data)
-        
+
         # ✅ 9:00 데이터가 포함되면 즉시 종료
-        if any(data[0] == "09:00" for data in page_data):
+        if "09:00" in [data[0] for data in page_data]:
             break
-        
+
         page += 1
-        time.sleep(0.5)  # 서버 부하 방지를 위한 짧은 딜레이
+        time.sleep(0.3)  # ✅ 딜레이 추가 (로딩 속도 조절)
 
     df = pd.DataFrame(all_data, columns=['Time', 'Price'])
     
-    # ✅ 9:00 이후 데이터만 필터링
-    df = df[df["Time"] >= "09:00"]
+    # ✅ 9:00~15:30 데이터만 필터링
+    df = df[(df["Time"] >= "09:00") & (df["Time"] <= "15:30")]
 
     df['Time'] = pd.to_datetime(df['Time'], format='%H:%M').dt.strftime('%H:%M')
     df = df.iloc[::-1].reset_index(drop=True)  # 시간순 정렬
     return df
-    
+
 # ✅ 4. FinanceDataReader를 통한 일별 시세 (1month, 1year)
 def get_daily_stock_data_fdr(ticker, period):
     try:
