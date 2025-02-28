@@ -2,5 +2,6 @@ streamlit
 plotly
 finance-datareader
 pandas
-bs4
-requests
+yfinance
+#bs4
+#requests
