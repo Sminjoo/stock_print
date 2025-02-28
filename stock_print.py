@@ -1,9 +1,10 @@
 import streamlit as st
 import plotly.graph_objects as go
-import yfinance as yf
 import FinanceDataReader as fdr
 from datetime import datetime, timedelta
 import pandas as pd
+import requests
+from bs4 import BeautifulSoup
 
 # ✅ 세션 상태 업데이트 함수 (기간 변경 시 즉시 반영)
 def update_period():
@@ -19,34 +20,57 @@ def get_recent_trading_day():
     return today.strftime('%Y-%m-%d')
 
 # ✅ 2. 티커 조회 함수
-def get_ticker(company, source="yahoo"):
+def get_ticker(company):
     try:
         listing = fdr.StockListing('KRX')
         ticker_row = listing[listing["Name"].str.strip() == company.strip()]
         if not ticker_row.empty:
-            krx_ticker = str(ticker_row.iloc[0]["Code"]).zfill(6)
-            return krx_ticker + ".KS" if source == "yahoo" else krx_ticker
+            return str(ticker_row.iloc[0]["Code"]).zfill(6)
         return None
     except Exception as e:
         st.error(f"티커 조회 중 오류 발생: {e}")
         return None
 
-# ✅ 3. 야후 파이낸스에서 분봉 데이터 가져오기 (1day, week)
-def get_intraday_data_yahoo(ticker, period="1d", interval="1m"):
-    try:
-        stock = yf.Ticker(ticker)
-        df = stock.history(period=period, interval=interval)
-        if df.empty:
-            return pd.DataFrame()
-        df = df.reset_index()
-        df = df.rename(columns={"Datetime": "Date", "Close": "Close",
-                                "Open": "Open", "High": "High", "Low": "Low"})
-        df["Date"] = pd.to_datetime(df["Date"])
-        df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)  # 주말 데이터 제거
-        return df
-    except Exception as e:
-        st.error(f"야후 파이낸스 데이터 불러오기 오류: {e}")
-        return pd.DataFrame()
+# ✅ 3. 네이버 금융에서 분봉 데이터 가져오기 (1day, week)
+def get_intraday_data_naver(ticker):
+    today = datetime.now().strftime('%Y%m%d')  # 오늘 날짜 (YYYYMMDD 형식)
+    url_template = f"https://finance.naver.com/item/sise_time.naver?code={ticker}&thistime={today}333333&page={{}}"
+    all_data = []
+    page = 1
+    
+    while True:
+        url = url_template.format(page)
+        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+        soup = BeautifulSoup(response.text, 'html.parser')
+        table = soup.find('table', {'class': 'type2'})
+        
+        if not table:
+            break
+        
+        rows = table.find_all('tr')[2:]
+        page_data = []
+        
+        for row in rows:
+            cols = row.find_all('td')
+            if len(cols) < 2:
+                continue
+            
+            time = cols[0].text.strip()
+            price = cols[1].text.strip().replace(',', '')
+            
+            if time and price.isdigit():
+                page_data.append([time, int(price)])
+        
+        if not page_data:
+            break
+        
+        all_data.extend(page_data)
+        page += 1
+    
+    df = pd.DataFrame(all_data, columns=['Time', 'Price'])
+    df['Time'] = pd.to_datetime(df['Time'], format='%H:%M').dt.strftime('%H:%M')
+    df = df.iloc[::-1].reset_index(drop=True)  # 시간순 정렬
+    return df
 
 # ✅ 4. FinanceDataReader를 통한 일별 시세 (1month, 1year)
 def get_daily_stock_data_fdr(ticker, period):
@@ -99,15 +123,13 @@ def plot_stock_plotly(df, company, period):
         # 각 월의 첫 거래일 찾기 (첫 번째 월은 제외)
         monthly_data = []
         for (year, month), group in df.groupby(['Year', 'Month']):
-            # 첫 번째 월 데이터는 건너뛰기
             if year == first_year and month == first_month:
                 continue
                 
-            # 월별 첫 날짜 선택
             first_day = group.iloc[0]
             monthly_data.append(first_day)
         
-        # 최종 tickvals 계산
+        # ✅ 최종 tickvals 계산 (빠진 부분 복구)
         if monthly_data:
             monthly_df = pd.DataFrame(monthly_data)
             tickvals = monthly_df["FormattedDate"].tolist()
