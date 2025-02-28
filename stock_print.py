@@ -175,22 +175,29 @@ def plot_stock_plotly(df, company, period):
     st.plotly_chart(fig)
 
 # ✅ 6. Streamlit 메인 실행 함수
+# ✅ 6. Streamlit 메인 실행 함수
 def main():
     st.set_page_config(page_title="Stock Price Visualization", page_icon=":chart_with_upwards_trend:")
     st.title("_주가 시각화_ :chart_with_upwards_trend:")
 
+    # ✅ Streamlit 세션 상태 초기화
     if "company_name" not in st.session_state:
         st.session_state.company_name = ""
     if "selected_period" not in st.session_state:
         st.session_state.selected_period = "1day"
+    if "data_loaded" not in st.session_state:
+        st.session_state.data_loaded = False  # 🚀 데이터를 처음부터 로드하지 않음
 
+    # ✅ 사이드바 입력
     with st.sidebar:
         company_name = st.text_input("분석할 기업명 (코스피 상장)", st.session_state.company_name)
         process = st.button("검색")
 
     if process and company_name:
         st.session_state.company_name = company_name
+        st.session_state.data_loaded = False  # 🚀 새로운 기업 검색 시 데이터 리셋
 
+    # ✅ 메인 화면: 주가 데이터 선택
     if st.session_state.company_name:
         st.subheader(f"📈 {st.session_state.company_name} 최근 주가 추이")
 
@@ -205,6 +212,15 @@ def main():
 
         st.write(f"🔍 선택된 기간: {st.session_state.selected_period}")
 
+        # ✅ 🚀 "데이터 불러오기" 버튼 추가 (바로 크롤링 안 하고, 버튼 누를 때 실행)
+        if st.button("📊 데이터 불러오기"):
+            st.session_state.data_loaded = True  # ✅ 버튼을 눌렀을 때만 크롤링 시작
+
+        # ✅ 🚀 데이터가 로드되지 않았다면 크롤링 실행 X (앱 멈춤 방지)
+        if not st.session_state.data_loaded:
+            st.warning("📢 '데이터 불러오기' 버튼을 눌러 주세요!")
+            return
+
         with st.spinner(f"📊 {st.session_state.company_name} ({st.session_state.selected_period}) 데이터 불러오는 중..."):
             ticker = get_ticker(st.session_state.company_name)
             if not ticker:
@@ -212,7 +228,7 @@ def main():
                 return
 
             if st.session_state.selected_period in ["1day", "week"]:
-                df = get_intraday_data_naver(ticker)
+                df = get_intraday_data_naver(ticker)  # ✅ 🚀 버튼 누를 때만 크롤링 실행
             else:
                 df = get_daily_stock_data_fdr(ticker, st.session_state.selected_period)
 
