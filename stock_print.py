@@ -61,10 +61,15 @@ def get_naver_fchart_minute_data(stock_code, minute="5", days=1):
     df = pd.DataFrame(data_list, columns=["시간", "종가"])
 
     # 📌 9시 ~ 15시 30분 데이터만 필터링
+    df["시간"] = pd.to_datetime(df["시간"])  # ✅ datetime 형식으로 변환
     df = df[(df["시간"].dt.time >= datetime.time(9, 0)) & (df["시간"].dt.time <= datetime.time(15, 30))]
 
+    # 📌 빈 데이터 제거
+    df.dropna(inplace=True)  # ✅ NaN 값이 있는 행 제거
+    df = df.reset_index(drop=True)  # ✅ 인덱스 초기화
+    
     # 📌 X축을 문자형으로 변환 (빈 데이터 없이 연속된 데이터만 표시)
-    df["시간"] = df["시간"].astype(str)
+    df["시간"] = df["시간"].astype(str)  # ✅ 필터링 후 변환해야 오류 없음
     
     return df
 
