@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 import datetime
 import plotly.express as px
 
-# 📌 네이버 fchart API에서 분봉 데이터 가져오기 (기존 코드 유지)
+# 📌 네이버 fchart API에서 분봉 데이터 가져오기
 def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
     """
     네이버 금융 Fchart API에서 분봉 데이터를 가져와서 DataFrame으로 변환
@@ -23,16 +23,14 @@ def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
     elif now.weekday() == 5:  # 토요일
         now -= datetime.timedelta(days=1)  # 금요일로 이동
 
-    # 📌 기준 날짜 출력 (1 Day 모드에서만 사용)
+    # 📌 기준 날짜 설정 (1 Day 모드일 때만 사용)
     target_date = now.strftime("%Y-%m-%d") if days == 1 else None
-    st.write(f"📅 **가져올 데이터 기간: {target_date if target_date else '최근 7일'}**")
 
     # 📌 ✅ 기존 방식 유지 (API가 정상 작동하는 URL 구조 사용)
     url = f"https://fchart.stock.naver.com/sise.nhn?symbol={stock_code}&timeframe=minute&count={days * 78}&requestType=0"
     response = requests.get(url)
 
     if response.status_code != 200:
-        st.error(f"❌ API 요청 실패: {response.status_code}")
         return pd.DataFrame()  # 요청 실패 시 빈 데이터 반환
     
     soup = BeautifulSoup(response.text, "lxml")  # ✅ XML 파싱
@@ -66,8 +64,6 @@ def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
     # 📌 Week 모드일 경우, 데이터 없는 날 제거
     if days == 7:
         df["날짜"] = df["시간"].dt.date  # 날짜 컬럼 추가
-        unique_dates = df["날짜"].unique()
-        st.write(f"📆 **데이터 포함된 날짜:** {unique_dates}")
 
     # 📌 X축을 문자형으로 변환 (빈 데이터 없이 연속된 데이터만 표시)
     df["시간"] = df["시간"].astype(str)
@@ -89,20 +85,12 @@ with col2:
 
 # 📌 버튼 클릭 여부에 따라 데이터 가져오기
 if day_selected or week_selected:
-    if day_selected:
-        st.write("🔍 **1 Day 모드: 1분봉 데이터 가져오는 중...**")
-        df = get_naver_fchart_minute_data(stock_code, "1", 1)  # 1분봉, 하루치
-    else:
-        st.write("🔍 **Week 모드: 5분봉 데이터 가져오는 중...**")
-        df = get_naver_fchart_minute_data(stock_code, "5", 7)  # 5분봉, 7일치
+    df = get_naver_fchart_minute_data(stock_code, "1" if day_selected else "5", 1 if day_selected else 7)
 
     if df.empty:
         st.error("❌ 데이터를 불러오지 못했습니다. 종목 코드를 확인하세요.")
     else:
-        st.success(f"✅ {stock_code} 데이터 조회 완료!")
-        st.write(df.head())
-
         # 📌 📊 가격 차트 (X축을 문자형으로 설정하여 데이터 없는 날 제외)
-        fig = px.line(df, x="시간", y="종가", title=f"{stock_code} {'1분봉 (1 Day)' if day_selected else '5분봉 (Week)'}")
+        fig = px.line(df, x="시간", y="종가", title=f"{stock_code} {'1 Day (1분봉)' if day_selected else 'Week (5분봉)'}")
         fig.update_xaxes(type="category")  # ✅ X축을 카테고리(문자형)로 설정
         st.plotly_chart(fig)
