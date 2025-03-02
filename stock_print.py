@@ -79,9 +79,9 @@ stock_code = st.text_input("종목 코드 입력 (예: 삼성전자 005930)", "0
 # 📌 `1 Day` & `Week` 버튼 UI
 col1, col2 = st.columns(2)
 with col1:
-    day_selected = st.button("📅 1 Day (1분봉)")
+    day_selected = st.button("📅 1 Day")
 with col2:
-    week_selected = st.button("📆 Week (5분봉)")
+    week_selected = st.button("📆 Week")
 
 # 📌 버튼 클릭 여부에 따라 데이터 가져오기
 if day_selected or week_selected:
@@ -91,6 +91,6 @@ if day_selected or week_selected:
         st.error("❌ 데이터를 불러오지 못했습니다. 종목 코드를 확인하세요.")
     else:
         # 📌 📊 가격 차트 (X축을 문자형으로 설정하여 데이터 없는 날 제외)
-        fig = px.line(df, x="시간", y="종가", title=f"{stock_code} {'1 Day (1분봉)' if day_selected else 'Week (5분봉)'}")
+        fig = px.line(df, x="시간", y="종가", title=f"{stock_code} {'1 Day' if day_selected else 'Week'}")
         fig.update_xaxes(type="category")  # ✅ X축을 카테고리(문자형)로 설정
         st.plotly_chart(fig)
