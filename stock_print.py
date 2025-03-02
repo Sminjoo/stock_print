@@ -32,11 +32,17 @@ def get_naver_fchart_minute_data(stock_code, minute="5", days=1):
     timeframe = "minute1" if minute == "1" else "minute5"
     url = f"https://fchart.stock.naver.com/sise.nhn?symbol={stock_code}&timeframe={timeframe}&count={days * 78}&requestType=0"
     
+    # 📌 User-Agent 헤더 추가 (차단 방지)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+    }
+    
     # 📌 요청 간격 추가 (과도한 요청 방지)
     time.sleep(0.5)  # 500ms (0.5초) 대기 후 요청
     
-    response = requests.get(url)
+    response = requests.get(url, headers=headers)  # ✅ 헤더 추가하여 차단 방지
     if response.status_code != 200:
+        st.error(f"❌ 네이버 API 응답 오류: {response.status_code}")
         return pd.DataFrame()  # 요청 실패 시 빈 데이터 반환
     
     soup = BeautifulSoup(response.text, "lxml")  # ✅ XML 파싱
