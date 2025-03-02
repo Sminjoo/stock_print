@@ -4,7 +4,6 @@ import pandas as pd
 from bs4 import BeautifulSoup
 import datetime
 import plotly.express as px
-import time  # 요청 간격 추가
 
 # 📌 네이버 fchart API에서 1분봉 & 5분봉 데이터 가져오기
 def get_naver_fchart_minute_data(stock_code, minute="5", days=1):
@@ -32,17 +31,8 @@ def get_naver_fchart_minute_data(stock_code, minute="5", days=1):
     timeframe = "minute1" if minute == "1" else "minute5"
     url = f"https://fchart.stock.naver.com/sise.nhn?symbol={stock_code}&timeframe={timeframe}&count={days * 78}&requestType=0"
     
-    # 📌 User-Agent 헤더 추가 (차단 방지)
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
-    }
-    
-    # 📌 요청 간격 추가 (과도한 요청 방지)
-    time.sleep(0.5)  # 500ms (0.5초) 대기 후 요청
-    
-    response = requests.get(url, headers=headers)  # ✅ 헤더 추가하여 차단 방지
+    response = requests.get(url)
     if response.status_code != 200:
-        st.error(f"❌ 네이버 API 응답 오류: {response.status_code}")
         return pd.DataFrame()  # 요청 실패 시 빈 데이터 반환
     
     soup = BeautifulSoup(response.text, "lxml")  # ✅ XML 파싱
@@ -53,29 +43,24 @@ def get_naver_fchart_minute_data(stock_code, minute="5", days=1):
         if len(values) < 6:
             continue
 
-        time_str, _, _, _, close, _ = values  # ✅ 종가(close)만 사용
+        time, _, _, _, close, _ = values  # ✅ 종가(close)만 사용 (거래량 제거)
         if close == "null":
             continue
         
-        time_obj = pd.to_datetime(time_str, format="%Y%m%d%H%M")
+        time = pd.to_datetime(time, format="%Y%m%d%H%M")
         close = float(close)
 
         # 📌 가져올 날짜의 데이터만 필터링
-        if time_obj.strftime("%Y-%m-%d") == target_date:
-            data_list.append([time_obj, close])
+        if time.strftime("%Y-%m-%d") == target_date:
+            data_list.append([time, close])
 
     df = pd.DataFrame(data_list, columns=["시간", "종가"])
 
     # 📌 9시 ~ 15시 30분 데이터만 필터링
-    df["시간"] = pd.to_datetime(df["시간"])  # ✅ datetime 형식으로 변환
     df = df[(df["시간"].dt.time >= datetime.time(9, 0)) & (df["시간"].dt.time <= datetime.time(15, 30))]
 
-    # 📌 빈 데이터 제거
-    df.dropna(inplace=True)  # ✅ NaN 값이 있는 행 제거
-    df = df.reset_index(drop=True)  # ✅ 인덱스 초기화
-    
     # 📌 X축을 문자형으로 변환 (빈 데이터 없이 연속된 데이터만 표시)
-    df["시간"] = df["시간"].astype(str)  # ✅ 필터링 후 변환해야 오류 없음
+    df["시간"] = df["시간"].astype(str)
     
     return df
 
