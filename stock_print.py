@@ -42,19 +42,18 @@ def get_naver_fchart_minute_data(stock_code, minute="5", days=1):
         if len(values) < 6:
             continue
 
-        time, _, _, _, close, volume = values  # 종가(close)와 거래량(volume)만 사용
-        if close == "null" or volume == "null":
+        time, _, _, _, close, _ = values  # ✅ 종가(close)만 사용 (거래량 삭제)
+        if close == "null":
             continue
         
         time = pd.to_datetime(time, format="%Y%m%d%H%M")
         close = float(close)
-        volume = int(volume)
 
         # 📌 가져올 날짜의 데이터만 필터링
         if time.strftime("%Y-%m-%d") == target_date:
-            data_list.append([time, close, volume])
+            data_list.append([time, close])
 
-    df = pd.DataFrame(data_list, columns=["시간", "종가", "거래량"])
+    df = pd.DataFrame(data_list, columns=["시간", "종가"])
     
     # 📌 ✅ 9시 ~ 15시 30분 데이터만 필터링
     df["시간"] = pd.to_datetime(df["시간"])  # ✅ datetime 변환
@@ -94,8 +93,3 @@ if st.button("📊 데이터 가져오기"):
         fig = px.line(df, x="시간", y="종가", title=f"{stock_code} {minute}분봉 차트")
         fig.update_xaxes(type="category")  # ✅ X축을 카테고리(문자형)로 설정
         st.plotly_chart(fig)
-
-        # 📌 거래량 막대 그래프 (X축을 문자형으로 설정)
-        fig_vol = px.bar(df, x="시간", y="거래량", title=f"{stock_code} 거래량 변화")
-        fig_vol.update_xaxes(type="category")  # ✅ X축을 문자형으로 설정
-        st.plotly_chart(fig_vol)
