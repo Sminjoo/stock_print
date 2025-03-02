@@ -56,6 +56,10 @@ def get_naver_fchart_minute_data(stock_code, minute="5", days=1):
 
     df = pd.DataFrame(data_list, columns=["시간", "종가", "거래량"])
     
+    # 📌 ✅ 9시 ~ 15시 30분 데이터만 필터링
+    df["시간"] = pd.to_datetime(df["시간"])  # ✅ datetime 변환
+    df = df[(df["시간"].dt.time >= datetime.time(9, 0)) & (df["시간"].dt.time <= datetime.time(15, 30))]
+
     # 📌 5분봉 데이터가 맞는지 확인 (시간 간격 체크)
     if not df.empty:
         df["시간 간격"] = df["시간"].diff().dt.total_seconds() / 60  # 분 단위 차이 계산
