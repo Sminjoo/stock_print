@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 import datetime
 import plotly.express as px
 
-# 📌 네이버 fchart API에서 분봉 데이터 가져오기
+# 📌 네이버 fchart API에서 분봉 데이터 가져오기 (기존 코드 유지)
 def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
     """
     네이버 금융 Fchart API에서 분봉 데이터를 가져와서 DataFrame으로 변환
@@ -23,18 +23,16 @@ def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
     elif now.weekday() == 5:  # 토요일
         now -= datetime.timedelta(days=1)  # 금요일로 이동
 
-    # 📌 기준 날짜 (1 Day 모드에서만 사용)
+    # 📌 기준 날짜 출력 (1 Day 모드에서만 사용)
     target_date = now.strftime("%Y-%m-%d") if days == 1 else None
     st.write(f"📅 **가져올 데이터 기간: {target_date if target_date else '최근 7일'}**")
 
-    # 📌 분봉 설정 (1분봉 or 5분봉)
-    timeframe = "minute1" if minute == "1" else "minute5"
-
-    # 📌 네이버 Fchart API 요청
-    url = f"https://fchart.stock.naver.com/sise.nhn?symbol={stock_code}&timeframe={timeframe}&count={days * 78}&requestType=0"
+    # 📌 ✅ 기존 방식 유지 (API가 정상 작동하는 URL 구조 사용)
+    url = f"https://fchart.stock.naver.com/sise.nhn?symbol={stock_code}&timeframe=minute&count={days * 78}&requestType=0"
     response = requests.get(url)
 
     if response.status_code != 200:
+        st.error(f"❌ API 요청 실패: {response.status_code}")
         return pd.DataFrame()  # 요청 실패 시 빈 데이터 반환
     
     soup = BeautifulSoup(response.text, "lxml")  # ✅ XML 파싱
