@@ -1,3 +1,4 @@
+
 import streamlit as st
 import requests
 import pandas as pd
@@ -76,7 +77,7 @@ st.write("네이버 금융에서 주식 분봉 데이터를 가져와 시각화�
 
 stock_code = st.text_input("종목 코드 입력 (예: 삼성전자 005930)", "005930")
 
-# 📌 1 Day & Week 버튼 UI
+# 📌 `1 Day` & `Week` 버튼 UI
 col1, col2 = st.columns(2)
 with col1:
     day_selected = st.button("📅 1 Day")
