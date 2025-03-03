@@ -33,28 +33,28 @@ def get_stock_info(stock_code):
         except:
             per, pbr = "N/A", "N/A"
 
-        # 📌 52주 최고/최저
+        # 📌 52주 최고/최저 (HTML 구조를 고려한 수정)
         try:
-            high_52 = soup.select_one("th.title:-soup-contains('52주 최고') + td.num span.tah").text.strip()
-            low_52 = soup.select_one("th.title:-soup-contains('52주 최저') + td.num span.tah").text.strip()
+            high_52 = soup.find("th", text="52주 최고").find_next_sibling("td").text.strip()
+            low_52 = soup.find("th", text="52주 최저").find_next_sibling("td").text.strip()
         except:
             high_52, low_52 = "N/A", "N/A"
 
         # 📌 시가총액
         try:
-            market_cap = soup.select_one("#_sise_market_sum").text.strip().replace(",", "") + "억원"
+            market_cap = soup.find("th", text="시가총액").find_next_sibling("td").text.strip().replace(",", "") + "억원"
         except:
             market_cap = "N/A"
 
         # 📌 BPS (주당순자산)
         try:
-            bps = soup.select_one("th.h_th2.th_cop_anal18 + td.t_line.cell_strong").text.strip().replace(",", "")
+            bps = soup.find("th", text="BPS(원)").find_next_sibling("td").text.strip().replace(",", "")
         except:
             bps = "N/A"
 
-        # 📌 주당배당금 가져오기
+        # 📌 주당배당금
         try:
-            dividend = soup.select_one("th.h_th2.th_cop_anal19 + td.t_line.cell_strong").text.strip().replace(",", "")
+            dividend = soup.find("th", text="주당배당금(원)").find_next_sibling("td").text.strip().replace(",", "")
             dividend = float(dividend) if dividend != "-" else 0
         except:
             dividend = 0
@@ -65,15 +65,15 @@ def get_stock_info(stock_code):
         except:
             dividend_yield = "N/A"
 
-        # 📌 부채비율 (전년도 기준, 3번째 값)
+        # 📌 부채비율 (전년도 기준)
         try:
-            debt_ratio = soup.select("th.h_th2.th_cop_anal14 + td")[2].text.strip().replace(",", "")
+            debt_ratio = soup.find("th", text="부채비율").find_next_sibling("td").text.strip().replace(",", "")
         except:
             debt_ratio = "N/A"
 
         # 📌 당기순이익 (전년도)
         try:
-            net_income = soup.select_one("th.h_th2.th_cop_anal10 + td.t_line.cell_strong").text.strip().replace(",", "")
+            net_income = soup.find("th", text="당기순이익").find_next_sibling("td").text.strip().replace(",", "")
         except:
             net_income = "N/A"
 
