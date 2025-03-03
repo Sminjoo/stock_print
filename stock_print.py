@@ -40,10 +40,11 @@ def get_stock_info(stock_code):
         except:
             market_cap = "N/A"
 
-        # 📌 52주 최고/최저 (주요 시세에서 가져오기)
+        # 📌 52주 최고/최저 (업데이트된 HTML 구조 반영)
         try:
-            high_52 = soup.find("th", class_="title", text="52주 최고").find_next_sibling("td").text.strip()
-            low_52 = soup.find("th", class_="title", text="52주 최저").find_next_sibling("td").text.strip()
+            price_table = soup.find("table", class_="type2 type_e_tax")
+            high_52 = price_table.find("th", text="52주 최고").find_next_sibling("td").find("span", class_="tah p11").text.strip()
+            low_52 = price_table.find("th", text="52주 최저").find_next_sibling("td").find("span", class_="tah p11").text.strip()
         except:
             high_52, low_52 = "N/A", "N/A"
 
@@ -52,15 +53,21 @@ def get_stock_info(stock_code):
             # 📌 당기순이익
             net_income = soup.find("th", class_="h_th2 th_cop_anal10").find_next_sibling("td", class_="t_line cell_strong").text.strip().replace(",", "")
 
-            # 📌 부채비율
-            debt_ratio = soup.find("th", class_="h_th2 th_cop_anal14").find_next_sibling("td", class_="null t_line cell_strong").text.strip().replace(",", "")
-
             # 📌 BPS (주당순자산)
             bps = soup.find("th", class_="h_th2 th_cop_anal18").find_next_sibling("td", class_="t_line cell_strong").text.strip().replace(",", "")
 
             # 📌 주당배당금
             dividend = soup.find("th", class_="h_th2 th_cop_anal19").find_next_sibling("td", class_="t_line cell_strong").text.strip().replace(",", "")
             dividend = float(dividend) if dividend != "-" else 0
+
+            # 📌 부채비율 (현재 값이 없으면 이전 값 사용)
+            debt_ratio_list = soup.find("th", class_="h_th2 th_cop_anal14").find_next_siblings("td")
+            debt_ratio = "N/A"
+            for td in reversed(debt_ratio_list):
+                ratio = td.text.strip().replace(",", "")
+                if ratio and ratio != "null":
+                    debt_ratio = ratio
+                    break
         except:
             net_income, debt_ratio, bps, dividend = "N/A", "N/A", "N/A", 0
 
