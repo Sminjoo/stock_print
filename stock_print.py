@@ -1,3 +1,4 @@
+
 import streamlit as st
 import requests
 import pandas as pd
@@ -12,11 +13,11 @@ def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
     """
     # 📌 현재 시간 가져오기
     now = datetime.datetime.now()
-    
+
     # 📌 아침 9시 이전이면 전날 데이터 가져오기
     if now.hour < 9:
         now -= datetime.timedelta(days=1)
-    
+
     # 📌 주말이면 금요일 데이터 가져오기
     if now.weekday() == 6:  # 일요일
         now -= datetime.timedelta(days=2)  # 금요일로 이동
@@ -32,7 +33,7 @@ def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
 
     if response.status_code != 200:
         return pd.DataFrame()  # 요청 실패 시 빈 데이터 반환
-    
+
     soup = BeautifulSoup(response.text, "lxml")  # ✅ XML 파싱
 
     data_list = []
@@ -44,7 +45,7 @@ def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
         time, _, _, _, close, _ = values  # ✅ 종가(close)만 사용 (거래량 삭제)
         if close == "null":
             continue
-        
+
         time = pd.to_datetime(time, format="%Y%m%d%H%M")
         close = float(close)
 
@@ -56,7 +57,7 @@ def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
             data_list.append([time, close])  # ✅ Week 모드에서는 전체 추가
 
     df = pd.DataFrame(data_list, columns=["시간", "종가"])
-    
+
     # 📌 ✅ 9시 ~ 15시 30분 데이터만 필터링 (Week 모드에서도 적용)
     df["시간"] = pd.to_datetime(df["시간"])
     df = df[(df["시간"].dt.time >= datetime.time(9, 0)) & (df["시간"].dt.time <= datetime.time(15, 30))]
@@ -79,9 +80,9 @@ stock_code = st.text_input("종목 코드 입력 (예: 삼성전자 005930)", "0
 # 📌 `1 Day` & `Week` 버튼 UI
 col1, col2 = st.columns(2)
 with col1:
-    day_selected = st.button("📅 1 Day (1분봉)")
+    day_selected = st.button("📅 1 Day")
 with col2:
-    week_selected = st.button("📆 Week (5분봉)")
+    week_selected = st.button("📆 Week")
 
 # 📌 버튼 클릭 여부에 따라 데이터 가져오기
 if day_selected or week_selected:
@@ -91,6 +92,6 @@ if day_selected or week_selected:
         st.error("❌ 데이터를 불러오지 못했습니다. 종목 코드를 확인하세요.")
     else:
         # 📌 📊 가격 차트 (X축을 문자형으로 설정하여 데이터 없는 날 제외)
-        fig = px.line(df, x="시간", y="종가", title=f"{stock_code} {'1 Day (1분봉)' if day_selected else 'Week (5분봉)'}")
+        fig = px.line(df, x="시간", y="종가", title=f"{stock_code} {'1 Day' if day_selected else 'Week'}")
         fig.update_xaxes(type="category")  # ✅ X축을 카테고리(문자형)로 설정
         st.plotly_chart(fig)
