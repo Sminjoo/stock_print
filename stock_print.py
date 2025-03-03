@@ -26,61 +26,54 @@ def get_stock_info(stock_code):
         except:
             current_price = "N/A"
 
-        # 📌 PER & PBR
+        # 📌 PER, PBR (동종업종비교에서 가져오기)
         try:
-            per = soup.select_one("#_per").text.strip() if soup.select_one("#_per") else "N/A"
-            pbr = soup.select_one("#_pbr").text.strip() if soup.select_one("#_pbr") else "N/A"
+            per = soup.find("h4", class_="h_sub sub_tit7").find_next("table").find_all("td")[10].text.strip()
+            pbr = soup.find("h4", class_="h_sub sub_tit7").find_next("table").find_all("td")[11].text.strip()
         except:
             per, pbr = "N/A", "N/A"
 
-        # 📌 52주 최고/최저
+        # 📌 시가총액 (동종업종비교에서 가져오기)
         try:
-            high_52 = soup.find("th", text="52주 최고").find_next_sibling("td").text.strip()
-            low_52 = soup.find("th", text="52주 최저").find_next_sibling("td").text.strip()
-        except:
-            high_52, low_52 = "N/A", "N/A"
-
-        # 📌 시가총액 (단위 처리)
-        try:
-            market_cap_raw = soup.find("th", text="시가총액").find_next_sibling("td").text.strip().replace(",", "")
-            market_cap = f"{int(market_cap_raw) / 10000:.2f}조 원"  # 억 원을 조 원으로 변환
+            market_cap = soup.find("h4", class_="h_sub sub_tit7").find_next("table").find_all("td")[4].text.strip()
+            market_cap = f"{int(market_cap.replace(',', '')) / 10000:.2f}조 원"  # 억 원 → 조 원 변환
         except:
             market_cap = "N/A"
 
-        # 📌 최신 연도의 BPS (주당순자산)
+        # 📌 52주 최고/최저 (주요 시세에서 가져오기)
         try:
-            bps_values = soup.find_all("th", text="BPS(원)")[0].find_next_siblings("td")
-            bps = bps_values[-1].text.strip().replace(",", "")  # 최신 연도 값 선택
+            high_52 = soup.find("strong", text="주요시세").find_next("table").find_all("td")[0].text.strip()
+            low_52 = soup.find("strong", text="주요시세").find_next("table").find_all("td")[1].text.strip()
         except:
-            bps = "N/A"
+            high_52, low_52 = "N/A", "N/A"
 
-        # 📌 최신 연도의 주당배당금
+        # 📌 최신 연도의 기업실적분석 (당기순이익, 부채비율, BPS, 주당배당금)
         try:
-            dividend_values = soup.find_all("th", text="주당배당금(원)")[0].find_next_siblings("td")
-            dividend = dividend_values[-1].text.strip().replace(",", "")
+            financial_table = soup.find("h4", class_="h_sub sub_tit6").find_next("table")
+
+            # 테이블에서 모든 행을 가져온 후, 최신 연도 값 선택
+            rows = financial_table.find_all("tr")
+
+            # 📌 당기순이익
+            net_income = rows[3].find_all("td")[-1].text.strip().replace(",", "")
+
+            # 📌 부채비율
+            debt_ratio = rows[7].find_all("td")[-1].text.strip().replace(",", "")
+
+            # 📌 BPS (주당순자산)
+            bps = rows[10].find_all("td")[-1].text.strip().replace(",", "")
+
+            # 📌 주당배당금
+            dividend = rows[13].find_all("td")[-1].text.strip().replace(",", "")
             dividend = float(dividend) if dividend != "-" else 0
         except:
-            dividend = 0
+            net_income, debt_ratio, bps, dividend = "N/A", "N/A", "N/A", 0
 
         # 📌 배당수익률 계산 (주당 배당금 / 현재가 × 100)
         try:
             dividend_yield = round(dividend / float(current_price) * 100, 2) if dividend > 0 and current_price != "N/A" else "N/A"
         except:
             dividend_yield = "N/A"
-
-        # 📌 최신 연도의 부채비율
-        try:
-            debt_ratio_values = soup.find_all("th", text="부채비율")[0].find_next_siblings("td")
-            debt_ratio = debt_ratio_values[-1].text.strip().replace(",", "")  # 최신 연도 값 선택
-        except:
-            debt_ratio = "N/A"
-
-        # 📌 최신 연도의 당기순이익
-        try:
-            net_income_values = soup.find_all("th", text="당기순이익")[0].find_next_siblings("td")
-            net_income = net_income_values[-1].text.strip().replace(",", "")  # 최신 연도 값 선택
-        except:
-            net_income = "N/A"
 
         return {
             "현재가": f"{current_price}원" if current_price != "N/A" else "N/A",
