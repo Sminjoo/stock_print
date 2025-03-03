@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import FinanceDataReader as fdr
 import requests
 from bs4 import BeautifulSoup
 import datetime
