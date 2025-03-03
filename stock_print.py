@@ -5,6 +5,33 @@ from bs4 import BeautifulSoup
 import datetime
 import plotly.express as px
 
+# 📌 네이버 금융에서 PER & PBR 가져오기
+def get_per_pbr(stock_code):
+    """
+    네이버 금융에서 특정 종목의 PER과 PBR을 크롤링하여 반환
+    """
+    url = f"https://finance.naver.com/item/main.nhn?code={stock_code}"
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+    }
+
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        return None, None  # 요청 실패 시 None 반환
+
+    soup = BeautifulSoup(response.text, "lxml")
+
+    # 📌 PER 값 가져오기
+    per_tag = soup.select_one("#_per")  # ID가 `_per`인 요소에서 가져오기
+    per = per_tag.text.strip() if per_tag else "N/A"
+
+    # 📌 PBR 값 가져오기
+    pbr_tag = soup.select_one("#_pbr")  # ID가 `_pbr`인 요소에서 가져오기
+    pbr = pbr_tag.text.strip() if pbr_tag else "N/A"
+
+    return per, pbr
+
 # 📌 네이버 fchart API에서 분봉 데이터 가져오기
 def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
     """
@@ -71,8 +98,8 @@ def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
     return df
 
 # 📌 Streamlit UI
-st.title("📈 국내 주식 분봉 차트 조회 (1 Day / Week)")
-st.write("네이버 금융에서 주식 분봉 데이터를 가져와 시각화합니다.")
+st.title("📈 국내 주식 분봉 차트 & PER/PBR 조회")
+st.write("네이버 금융에서 주식 분봉 데이터를 가져오고, PER 및 PBR 정보를 확인합니다.")
 
 stock_code = st.text_input("종목 코드 입력 (예: 삼성전자 005930)", "005930")
 
@@ -94,3 +121,11 @@ if day_selected or week_selected:
         fig = px.line(df, x="시간", y="종가", title=f"{stock_code} {'1 Day' if day_selected else 'Week'}")
         fig.update_xaxes(type="category")  # ✅ X축을 카테고리(문자형)로 설정
         st.plotly_chart(fig)
+
+        # 📌 PER & PBR 가져오기
+        per, pbr = get_per_pbr(stock_code)
+        if per == "N/A" or pbr == "N/A":
+            st.error("❌ PER 및 PBR 데이터를 가져오지 못했습니다.")
+        else:
+            st.write(f"📊 **PER:** {per}  |  **PBR:** {pbr}")
+
