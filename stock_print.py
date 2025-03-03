@@ -1,97 +1,109 @@
 
 import streamlit as st
 import requests
-import pandas as pd
 from bs4 import BeautifulSoup
-import datetime
-import plotly.express as px
 
-# 📌 네이버 fchart API에서 분봉 데이터 가져오기
-def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
+# 📌 네이버 금융에서 종목 주요 재무 데이터 가져오기
+def get_stock_info(stock_code):
     """
-    네이버 금융 Fchart API에서 분봉 데이터를 가져와서 DataFrame으로 변환
+    네이버 금융에서 특정 종목의 주요 재무 지표를 크롤링하여 반환
     """
-    # 📌 현재 시간 가져오기
-    now = datetime.datetime.now()
+    url = f"https://finance.naver.com/item/main.nhn?code={stock_code}"
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+    }
 
-    # 📌 아침 9시 이전이면 전날 데이터 가져오기
-    if now.hour < 9:
-        now -= datetime.timedelta(days=1)
-
-    # 📌 주말이면 금요일 데이터 가져오기
-    if now.weekday() == 6:  # 일요일
-        now -= datetime.timedelta(days=2)  # 금요일로 이동
-    elif now.weekday() == 5:  # 토요일
-        now -= datetime.timedelta(days=1)  # 금요일로 이동
-
-    # 📌 기준 날짜 설정 (1 Day 모드일 때만 사용)
-    target_date = now.strftime("%Y-%m-%d") if days == 1 else None
-
-    # 📌 ✅ 기존 방식 유지 (API가 정상 작동하는 URL 구조 사용)
-    url = f"https://fchart.stock.naver.com/sise.nhn?symbol={stock_code}&timeframe=minute&count={days * 78}&requestType=0"
-    response = requests.get(url)
-
+    response = requests.get(url, headers=headers)
     if response.status_code != 200:
-        return pd.DataFrame()  # 요청 실패 시 빈 데이터 반환
+        return None  # 요청 실패 시 None 반환
 
-    soup = BeautifulSoup(response.text, "lxml")  # ✅ XML 파싱
+    soup = BeautifulSoup(response.text, "html.parser")
 
-    data_list = []
-    for item in soup.find_all("item"):
-        values = item["data"].split("|")
-        if len(values) < 6:
-            continue
+    try:
+        # 📌 현재 주가
+        try:
+            current_price = soup.find("th", class_="h_th2 th_cop_comp2").find_next("td").text.strip().replace(",", "")
+        except:
+            current_price = "N/A"
 
-        time, _, _, _, close, _ = values  # ✅ 종가(close)만 사용 (거래량 삭제)
-        if close == "null":
-            continue
+        # 📌 PER, PBR (동종업종비교에서 가져오기)
+        try:
+            per = soup.find("th", class_="h_th2 th_cop_comp13").find_next("td").text.strip()
+            pbr = soup.find("th", class_="h_th2 th_cop_comp14").find_next("td").text.strip()
+        except:
+            per, pbr = "N/A", "N/A"
 
-        time = pd.to_datetime(time, format="%Y%m%d%H%M")
-        close = float(close)
+        # 📌 시가총액 (조 단위 변환)
+        try:
+            market_cap = soup.find("th", class_="h_th2 th_cop_comp5").find_next("td").text.strip().replace(",", "")
+            market_cap = f"{int(market_cap) / 10000:.2f}조 원"
+        except:
+            market_cap = "N/A"
 
-        # 📌 1 Day 모드일 때만 날짜 필터링
-        if target_date:
-            if time.strftime("%Y-%m-%d") == target_date:
-                data_list.append([time, close])
-        else:
-            data_list.append([time, close])  # ✅ Week 모드에서는 전체 추가
+        # 📌 52주 최고/최저 (업데이트된 HTML 구조 반영)
+        try:
+            price_table = soup.find("table", class_="type2 type_e_tax")
+            high_52 = price_table.find("th", text="52주 최고").find_next_sibling("td").find("span", class_="tah p11").text.strip()
+            low_52 = price_table.find("th", text="52주 최저").find_next_sibling("td").find("span", class_="tah p11").text.strip()
+        except:
+            high_52, low_52 = "N/A", "N/A"
 
-    df = pd.DataFrame(data_list, columns=["시간", "종가"])
+        # 📌 최신 연도의 기업실적분석 (당기순이익, 부채비율, BPS, 주당배당금)
+        try:
+            # 📌 당기순이익
+            net_income = soup.find("th", class_="h_th2 th_cop_anal10").find_next_sibling("td", class_="t_line cell_strong").text.strip().replace(",", "")
 
-    # 📌 ✅ 9시 ~ 15시 30분 데이터만 필터링 (Week 모드에서도 적용)
-    df["시간"] = pd.to_datetime(df["시간"])
-    df = df[(df["시간"].dt.time >= datetime.time(9, 0)) & (df["시간"].dt.time <= datetime.time(15, 30))]
+            # 📌 BPS (주당순자산)
+            bps = soup.find("th", class_="h_th2 th_cop_anal18").find_next_sibling("td", class_="t_line cell_strong").text.strip().replace(",", "")
 
-    # 📌 Week 모드일 경우, 데이터 없는 날 제거
-    if days == 7:
-        df["날짜"] = df["시간"].dt.date  # 날짜 컬럼 추가
+            # 📌 주당배당금
+            dividend = soup.find("th", class_="h_th2 th_cop_anal19").find_next_sibling("td", class_="t_line cell_strong").text.strip().replace(",", "")
+            dividend = float(dividend) if dividend != "-" else 0
 
-    # 📌 X축을 문자형으로 변환 (빈 데이터 없이 연속된 데이터만 표시)
-    df["시간"] = df["시간"].astype(str)
+            # 📌 부채비율 (현재 값이 없으면 이전 값 사용)
+            debt_ratio_list = soup.find("th", class_="h_th2 th_cop_anal14").find_next_siblings("td")
+            debt_ratio = "N/A"
+            for td in reversed(debt_ratio_list):
+                ratio = td.text.strip().replace(",", "")
+                if ratio and ratio != "null":
+                    debt_ratio = ratio
+                    break
+        except:
+            net_income, debt_ratio, bps, dividend = "N/A", "N/A", "N/A", 0
 
-    return df
+        # 📌 배당수익률 계산 (주당 배당금 / 현재가 × 100)
+        try:
+            dividend_yield = round(dividend / float(current_price) * 100, 2) if dividend > 0 and current_price != "N/A" else "N/A"
+        except:
+            dividend_yield = "N/A"
+
+        return {
+            "현재가": f"{current_price}원" if current_price != "N/A" else "N/A",
+            "PER": per,
+            "PBR": pbr,
+            "52주 최고": f"{high_52}원" if high_52 != "N/A" else "N/A",
+            "52주 최저": f"{low_52}원" if low_52 != "N/A" else "N/A",
+            "시가총액": market_cap,
+            "BPS": f"{bps}원" if bps != "N/A" else "N/A",
+            "배당수익률": f"{dividend_yield}%" if dividend_yield != "N/A" else "N/A",
+            "부채비율": f"{debt_ratio}%" if debt_ratio != "N/A" else "N/A",
+            "당기순이익": f"{net_income}억 원" if net_income != "N/A" else "N/A"
+        }
+    except Exception as e:
+        return None
 
 # 📌 Streamlit UI
-st.title("📈 국내 주식 분봉 차트 조회 (1 Day / Week)")
-st.write("네이버 금융에서 주식 분봉 데이터를 가져와 시각화합니다.")
+st.title("📈 국내 주식 분석 챗봇")
+st.write("네이버 금융에서 주식 분봉 데이터를 가져오고, 주요 재무 지표를 확인합니다.")
 
 stock_code = st.text_input("종목 코드 입력 (예: 삼성전자 005930)", "005930")
 
-# 📌 `1 Day` & `Week` 버튼 UI
-col1, col2 = st.columns(2)
-with col1:
-    day_selected = st.button("📅 1 Day")
-with col2:
-    week_selected = st.button("📆 Week")
-
-# 📌 버튼 클릭 여부에 따라 데이터 가져오기
-if day_selected or week_selected:
-    df = get_naver_fchart_minute_data(stock_code, "1" if day_selected else "5", 1 if day_selected else 7)
-
-    if df.empty:
-        st.error("❌ 데이터를 불러오지 못했습니다. 종목 코드를 확인하세요.")
+if st.button("📊 종목 정보 조회"):
+    stock_info = get_stock_info(stock_code)
+    if stock_info:
+        st.write("📊 **종목 주요 정보**")
+        for key, value in stock_info.items():
+            st.write(f"**{key}:** {value}")
     else:
-        # 📌 📊 가격 차트 (X축을 문자형으로 설정하여 데이터 없는 날 제외)
-        fig = px.line(df, x="시간", y="종가", title=f"{stock_code} {'1 Day' if day_selected else 'Week'}")
-        fig.update_xaxes(type="category")  # ✅ X축을 카테고리(문자형)로 설정
-        st.plotly_chart(fig)
+        st.error("❌ 주요 재무 데이터를 가져오지 못했습니다.")
