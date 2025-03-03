@@ -20,59 +20,71 @@ def get_stock_info(stock_code):
     soup = BeautifulSoup(response.text, "html.parser")
 
     try:
-        # 📌 현재 주가 가져오기
-        current_price = soup.select_one(".no_today .blind").text.strip()
-
-        # 📌 PER & PBR 가져오기
-        per = soup.select_one("#_per").text.strip() if soup.select_one("#_per") else "N/A"
-        pbr = soup.select_one("#_pbr").text.strip() if soup.select_one("#_pbr") else "N/A"
-
-        # 📌 52주 최고/최저 가져오기
+        # 📌 현재 주가
         try:
-            high_52 = soup.select_one("table tr:nth-child(1) td em").text.strip()
-            low_52 = soup.select_one("table tr:nth-child(2) td em").text.strip()
+            current_price = soup.select_one(".no_today .blind").text.strip().replace(",", "")
+        except:
+            current_price = "N/A"
+
+        # 📌 PER & PBR
+        try:
+            per = soup.select_one("#_per").text.strip() if soup.select_one("#_per") else "N/A"
+            pbr = soup.select_one("#_pbr").text.strip() if soup.select_one("#_pbr") else "N/A"
+        except:
+            per, pbr = "N/A", "N/A"
+
+        # 📌 52주 최고/최저
+        try:
+            high_52 = soup.select_one("th.title:-soup-contains('52주 최고') + td.num span.tah").text.strip()
+            low_52 = soup.select_one("th.title:-soup-contains('52주 최저') + td.num span.tah").text.strip()
         except:
             high_52, low_52 = "N/A", "N/A"
 
-        # 📌 시가총액 가져오기
+        # 📌 시가총액
         try:
-            market_cap = soup.select_one("div.first dd").text.split()[1]
+            market_cap = soup.select_one("#_sise_market_sum").text.strip().replace(",", "") + "억원"
         except:
             market_cap = "N/A"
 
         # 📌 BPS (주당순자산)
         try:
-            bps = soup.select("table tbody tr td em")[5].text.strip()
+            bps = soup.select_one("th.h_th2.th_cop_anal18 + td.t_line.cell_strong").text.strip().replace(",", "")
         except:
             bps = "N/A"
 
-        # 📌 배당수익률 계산 (주당 배당금 / 현재가)
+        # 📌 주당배당금 가져오기
         try:
-            dividend = soup.select("table tbody tr td em")[10].text.strip()
-            dividend_yield = round(float(dividend) / float(current_price) * 100, 2) if dividend != "-" else "N/A"
+            dividend = soup.select_one("th.h_th2.th_cop_anal19 + td.t_line.cell_strong").text.strip().replace(",", "")
+            dividend = float(dividend) if dividend != "-" else 0
+        except:
+            dividend = 0
+
+        # 📌 배당수익률 계산 (주당 배당금 / 현재가 × 100)
+        try:
+            dividend_yield = round(dividend / float(current_price) * 100, 2) if dividend > 0 and current_price != "N/A" else "N/A"
         except:
             dividend_yield = "N/A"
 
-        # 📌 부채비율 (전년도 기준)
+        # 📌 부채비율 (전년도 기준, 3번째 값)
         try:
-            debt_ratio = soup.select("table tbody tr td em")[7].text.strip()
+            debt_ratio = soup.select("th.h_th2.th_cop_anal14 + td")[2].text.strip().replace(",", "")
         except:
             debt_ratio = "N/A"
 
         # 📌 당기순이익 (전년도)
         try:
-            net_income = soup.select("table tbody tr td em")[3].text.strip()
+            net_income = soup.select_one("th.h_th2.th_cop_anal10 + td.t_line.cell_strong").text.strip().replace(",", "")
         except:
             net_income = "N/A"
 
         return {
-            "현재가": current_price,
-            "52주 최고": high_52,
-            "52주 최저": low_52,
-            "시가총액": market_cap,
+            "현재가": f"{current_price}원" if current_price != "N/A" else "N/A",
             "PER": per,
             "PBR": pbr,
-            "BPS": bps,
+            "52주 최고": f"{high_52}원" if high_52 != "N/A" else "N/A",
+            "52주 최저": f"{low_52}원" if low_52 != "N/A" else "N/A",
+            "시가총액": market_cap,
+            "BPS": f"{bps}원" if bps != "N/A" else "N/A",
             "배당수익률": f"{dividend_yield}%" if dividend_yield != "N/A" else "N/A",
             "부채비율": f"{debt_ratio}%" if debt_ratio != "N/A" else "N/A",
             "당기순이익": f"{net_income}억 원" if net_income != "N/A" else "N/A"
