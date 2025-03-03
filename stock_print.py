@@ -1,10 +1,45 @@
-
 import streamlit as st
-import requests
 import pandas as pd
+import FinanceDataReader as fdr
+import requests
 from bs4 import BeautifulSoup
 import datetime
 import plotly.express as px
+
+# 📌 가장 최근 거래일을 구하는 함수
+def get_recent_trading_day():
+    """
+    가장 최근 거래일을 구하는 함수
+    Returns:
+        str: 최근 거래일(YYYY-MM-DD 형식)
+    """
+    today = datetime.datetime.now()
+    if today.hour < 9:  # 9시 이전이면 전날을 기준으로
+        today -= datetime.timedelta(days=1)
+    while today.weekday() in [5, 6]:  # 토요일(5), 일요일(6)이면 하루씩 감소
+        today -= datetime.timedelta(days=1)
+    return today.strftime('%Y-%m-%d')
+
+
+# 📌 기업명으로부터 증권 코드를 찾는 함수 (KRX 기준)
+def get_ticker(company):
+    """
+    기업명으로부터 증권 코드를 찾는 함수
+    Args:
+        company (str): 기업명
+    Returns:
+        str: 티커 코드 (6자리 숫자 문자열)
+    """
+    try:
+        listing = fdr.StockListing('KRX')
+        ticker_row = listing[listing["Name"].str.strip() == company.strip()]
+        if not ticker_row.empty:
+            return str(ticker_row.iloc[0]["Code"]).zfill(6)  # KRX용 티커 반환
+        return None
+    except Exception as e:
+        st.error(f"티커 조회 중 오류 발생: {e}")
+        return None
+
 
 # 📌 네이버 fchart API에서 분봉 데이터 가져오기
 def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
@@ -27,7 +62,7 @@ def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
     # 📌 기준 날짜 설정 (1 Day 모드일 때만 사용)
     target_date = now.strftime("%Y-%m-%d") if days == 1 else None
 
-    # 📌 ✅ 기존 방식 유지 (API가 정상 작동하는 URL 구조 사용)
+    # 📌 ✅ 네이버 Fchart API 호출
     url = f"https://fchart.stock.naver.com/sise.nhn?symbol={stock_code}&timeframe=minute&count={days * 78}&requestType=0"
     response = requests.get(url)
 
@@ -58,18 +93,43 @@ def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
 
     df = pd.DataFrame(data_list, columns=["시간", "종가"])
 
-    # 📌 ✅ 9시 ~ 15시 30분 데이터만 필터링 (Week 모드에서도 적용)
+    # 📌 ✅ 9시 ~ 15시 30분 데이터만 필터링
     df["시간"] = pd.to_datetime(df["시간"])
     df = df[(df["시간"].dt.time >= datetime.time(9, 0)) & (df["시간"].dt.time <= datetime.time(15, 30))]
-
-    # 📌 Week 모드일 경우, 데이터 없는 날 제거
-    if days == 7:
-        df["날짜"] = df["시간"].dt.date  # 날짜 컬럼 추가
 
     # 📌 X축을 문자형으로 변환 (빈 데이터 없이 연속된 데이터만 표시)
     df["시간"] = df["시간"].astype(str)
 
     return df
+
+
+# 📌 FinanceDataReader를 통해 일별 시세를 가져오는 함수 (1개월, 1년)
+def get_daily_stock_data_fdr(ticker, period):
+    """
+    FinanceDataReader를 통해 일별 시세를 가져오는 함수
+    Args:
+        ticker (str): 티커 코드
+        period (str): 기간 ("1month" 또는 "1year")
+    Returns:
+        DataFrame: 주식 데이터
+    """
+    try:
+        end_date = get_recent_trading_day()
+        start_date = (datetime.datetime.strptime(end_date, '%Y-%m-%d') - datetime.timedelta(
+            days=30 if period == "1month" else 365)).strftime('%Y-%m-%d')
+        df = fdr.DataReader(ticker, start_date, end_date)
+        if df.empty:
+            return pd.DataFrame()
+        df = df.reset_index()
+        df = df.rename(columns={"Date": "Date", "Close": "Close"})
+        # 주말 데이터 완전 제거
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df[df["Date"].dt.weekday < 5].reset_index(drop=True)
+        return df
+    except Exception as e:
+        st.error(f"FinanceDataReader 데이터 불러오기 오류: {e}")
+        return pd.DataFrame()
+
 
 # 📌 Streamlit UI
 st.title("📈 국내 주식 분봉 차트 조회 (1 Day / Week)")
