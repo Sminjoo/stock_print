@@ -1,4 +1,3 @@
-
 import streamlit as st
 import requests
 import pandas as pd
@@ -24,47 +23,55 @@ def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
     elif now.weekday() == 5:  # 토요일
         now -= datetime.timedelta(days=1)  # 금요일로 이동
 
-    # 📌 기준 날짜 설정 (1 Day 모드일 때만 사용)
-    target_date = now.strftime("%Y-%m-%d") if days == 1 else None
+    # 📌 최신 데이터를 찾는 로직 추가
+    while True:
+        target_date = now.strftime("%Y-%m-%d") if days == 1 else None
+        url = f"https://fchart.stock.naver.com/sise.nhn?symbol={stock_code}&timeframe=minute&count={days * 78}&requestType=0"
+        response = requests.get(url)
 
-    # 📌 ✅ 기존 방식 유지 (API가 정상 작동하는 URL 구조 사용)
-    url = f"https://fchart.stock.naver.com/sise.nhn?symbol={stock_code}&timeframe=minute&count={days * 78}&requestType=0"
-    response = requests.get(url)
+        if response.status_code != 200:
+            return pd.DataFrame()  # 요청 실패 시 빈 데이터 반환
 
-    if response.status_code != 200:
-        return pd.DataFrame()  # 요청 실패 시 빈 데이터 반환
+        soup = BeautifulSoup(response.text, "lxml")  # ✅ XML 파싱
 
-    soup = BeautifulSoup(response.text, "lxml")  # ✅ XML 파싱
+        data_list = []
+        for item in soup.find_all("item"):
+            values = item["data"].split("|")
+            if len(values) < 6:
+                continue
 
-    data_list = []
-    for item in soup.find_all("item"):
-        values = item["data"].split("|")
-        if len(values) < 6:
-            continue
+            time, _, _, _, close, _ = values  # ✅ 종가(close)만 사용 (거래량 삭제)
+            if close == "null":
+                continue
 
-        time, _, _, _, close, _ = values  # ✅ 종가(close)만 사용 (거래량 삭제)
-        if close == "null":
-            continue
+            time = pd.to_datetime(time, format="%Y%m%d%H%M")
+            close = float(close)
 
-        time = pd.to_datetime(time, format="%Y%m%d%H%M")
-        close = float(close)
+            # 📌 1 Day 모드일 때만 날짜 필터링
+            if target_date:
+                if time.strftime("%Y-%m-%d") == target_date:
+                    data_list.append([time, close])
+            else:
+                data_list.append([time, close])  # ✅ Week 모드에서는 전체 추가
 
-        # 📌 1 Day 모드일 때만 날짜 필터링
-        if target_date:
-            if time.strftime("%Y-%m-%d") == target_date:
-                data_list.append([time, close])
+        df = pd.DataFrame(data_list, columns=["시간", "종가"])
+
+        # 📌 ✅ 9시 ~ 15시 30분 데이터만 필터링 (Week 모드에서도 적용)
+        df["시간"] = pd.to_datetime(df["시간"])
+        df = df[(df["시간"].dt.time >= datetime.time(9, 0)) & (df["시간"].dt.time <= datetime.time(15, 30))]
+
+        # ✅ 데이터가 없는 경우 → 하루 전으로 이동하여 다시 시도
+        if df.empty:
+            now -= datetime.timedelta(days=1)
+            # 📌 주말이면 금요일로 이동
+            while now.weekday() in [5, 6]:  # 토요일(5) 또는 일요일(6)
+                now -= datetime.timedelta(days=1)
         else:
-            data_list.append([time, close])  # ✅ Week 모드에서는 전체 추가
+            break  # 데이터를 찾았으면 반복 종료
 
-    df = pd.DataFrame(data_list, columns=["시간", "종가"])
-
-    # 📌 ✅ 9시 ~ 15시 30분 데이터만 필터링 (Week 모드에서도 적용)
-    df["시간"] = pd.to_datetime(df["시간"])
-    df = df[(df["시간"].dt.time >= datetime.time(9, 0)) & (df["시간"].dt.time <= datetime.time(15, 30))]
-
-    # 📌 Week 모드일 경우, 데이터 없는 날 제거
+    # 📌 Week 모드일 경우, 날짜 컬럼 추가
     if days == 7:
-        df["날짜"] = df["시간"].dt.date  # 날짜 컬럼 추가
+        df["날짜"] = df["시간"].dt.date
 
     # 📌 X축을 문자형으로 변환 (빈 데이터 없이 연속된 데이터만 표시)
     df["시간"] = df["시간"].astype(str)
