@@ -5,10 +5,10 @@ from bs4 import BeautifulSoup
 import datetime
 import plotly.express as px
 
-# 📌 네이버 금융에서 PER & PBR 가져오기
-def get_per_pbr(stock_code):
+# 📌 네이버 금융에서 종목 주요 재무 데이터 가져오기
+def get_stock_info(stock_code):
     """
-    네이버 금융에서 특정 종목의 PER과 PBR을 크롤링하여 반환
+    네이버 금융에서 특정 종목의 주요 재무 지표를 크롤링하여 반환
     """
     url = f"https://finance.naver.com/item/main.nhn?code={stock_code}"
     
@@ -18,19 +18,52 @@ def get_per_pbr(stock_code):
 
     response = requests.get(url, headers=headers)
     if response.status_code != 200:
-        return None, None  # 요청 실패 시 None 반환
+        return None  # 요청 실패 시 None 반환
 
     soup = BeautifulSoup(response.text, "lxml")
 
-    # 📌 PER 값 가져오기
-    per_tag = soup.select_one("#_per")  # ID가 `_per`인 요소에서 가져오기
-    per = per_tag.text.strip() if per_tag else "N/A"
+    try:
+        # 📌 현재 주가
+        current_price = soup.select_one(".no_today .blind").text.strip()
 
-    # 📌 PBR 값 가져오기
-    pbr_tag = soup.select_one("#_pbr")  # ID가 `_pbr`인 요소에서 가져오기
-    pbr = pbr_tag.text.strip() if pbr_tag else "N/A"
+        # 📌 52주 최고/최저
+        high_52 = soup.select("td.first .blind")[0].text.strip()
+        low_52 = soup.select("td.first .blind")[1].text.strip()
 
-    return per, pbr
+        # 📌 시가총액
+        market_cap = soup.select_one(".tab_con1 tbody tr:nth-of-type(1) td").text.strip()
+
+        # 📌 PER & PBR
+        per = soup.select_one("#_per").text.strip() if soup.select_one("#_per") else "N/A"
+        pbr = soup.select_one("#_pbr").text.strip() if soup.select_one("#_pbr") else "N/A"
+
+        # 📌 BPS (주당순자산)
+        bps = soup.select("table tbody tr td em")[5].text.strip()
+
+        # 📌 배당수익률 계산 (주당 배당금 / 현재가)
+        dividend = soup.select("table tbody tr td em")[10].text.strip()
+        dividend_yield = round(float(dividend) / float(current_price) * 100, 2) if dividend != "-" else "N/A"
+
+        # 📌 부채비율 (전년도 기준)
+        debt_ratio = soup.select("table tbody tr td em")[7].text.strip()
+
+        # 📌 당기순이익 (전년도)
+        net_income = soup.select("table tbody tr td em")[3].text.strip()
+
+        return {
+            "현재가": current_price,
+            "52주 최고": high_52,
+            "52주 최저": low_52,
+            "시가총액": market_cap,
+            "PER": per,
+            "PBR": pbr,
+            "BPS": bps,
+            "배당수익률": f"{dividend_yield}%" if dividend_yield != "N/A" else "N/A",
+            "부채비율": f"{debt_ratio}%",
+            "당기순이익": f"{net_income}억 원"
+        }
+    except Exception as e:
+        return None
 
 # 📌 네이버 fchart API에서 분봉 데이터 가져오기
 def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
@@ -98,8 +131,8 @@ def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
     return df
 
 # 📌 Streamlit UI
-st.title("📈 국내 주식 분봉 차트 & PER/PBR 조회")
-st.write("네이버 금융에서 주식 분봉 데이터를 가져오고, PER 및 PBR 정보를 확인합니다.")
+st.title("📈 국내 주식 분석 챗봇")
+st.write("네이버 금융에서 주식 분봉 데이터를 가져오고, 주요 재무 지표를 확인합니다.")
 
 stock_code = st.text_input("종목 코드 입력 (예: 삼성전자 005930)", "005930")
 
@@ -122,10 +155,11 @@ if day_selected or week_selected:
         fig.update_xaxes(type="category")  # ✅ X축을 카테고리(문자형)로 설정
         st.plotly_chart(fig)
 
-        # 📌 PER & PBR 가져오기
-        per, pbr = get_per_pbr(stock_code)
-        if per == "N/A" or pbr == "N/A":
-            st.error("❌ PER 및 PBR 데이터를 가져오지 못했습니다.")
+        # 📌 주요 재무 데이터 가져오기
+        stock_info = get_stock_info(stock_code)
+        if stock_info:
+            st.write("📊 **종목 주요 정보**")
+            for key, value in stock_info.items():
+                st.write(f"**{key}:** {value}")
         else:
-            st.write(f"📊 **PER:** {per}  |  **PBR:** {pbr}")
-
+            st.error("❌ 주요 재무 데이터를 가져오지 못했습니다.")
