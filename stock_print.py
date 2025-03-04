@@ -4,6 +4,8 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, time
 import FinanceDataReader as fdr
+import plotly.graph_objects as go
+import plotly.express as px
 
 # 📌 가장 최근 거래일을 구하는 함수
 def get_recent_trading_day():
