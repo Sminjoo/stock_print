@@ -109,17 +109,14 @@ if stock_name:
     else:
         st.error("❌ 해당 기업의 종목 코드를 찾을 수 없습니다.")
 
-# 📌 `1 Day` & `Week` 버튼 UI
-col1, col2 = st.columns(2)
+# 📌 4개 버튼 (1day, week, 1month, 1year) 한 줄 배치
+col1, col2, col3, col4 = st.columns(4)
 with col1:
     day_selected = st.button("📅 1 Day")
 with col2:
     week_selected = st.button("📆 Week")
-
-# 📌 `1 Month` & `1 Year` 버튼 UI 추가
-col3, col4 = st.columns(2)
 with col3:
-    month_selected = st.button("📆 1 Month")
+    month_selected = st.button("📅 1 Month")
 with col4:
     year_selected = st.button("📆 1 Year")
 
