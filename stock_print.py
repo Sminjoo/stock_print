@@ -9,11 +9,6 @@ import plotly.express as px
 
 # 📌 가장 최근 거래일을 구하는 함수
 def get_recent_trading_day():
-    """
-    가장 최근 거래일을 구하는 함수
-    Returns:
-        str: 최근 거래일(YYYY-MM-DD 형식)
-    """
     today = datetime.now()
     if today.hour < 9:
         today -= timedelta(days=1)
@@ -23,13 +18,6 @@ def get_recent_trading_day():
 
 # 📌 기업명으로부터 증권 코드를 찾는 함수 (KRX 기준)
 def get_ticker(company):
-    """
-    기업명으로부터 증권 코드를 찾는 함수
-    Args:
-        company (str): 기업명
-    Returns:
-        str: 티커 코드 (6자리 숫자 문자열)
-    """
     try:
         listing = fdr.StockListing('KRX')
         ticker_row = listing[listing["Name"].str.strip() == company.strip()]
@@ -40,17 +28,13 @@ def get_ticker(company):
         st.error(f"티커 조회 중 오류 발생: {e}")
         return None
 
-# 📌 네이버 Fchart API에서 분봉 데이터 가져오기 (최신 거래일 탐색 포함)
+# 📌 네이버 Fchart API에서 분봉 데이터 가져오기
 def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
-    """
-    네이버 금융 Fchart API에서 분봉 데이터를 가져와서 DataFrame으로 변환
-    """
     now = datetime.now()
 
     if now.hour < 9:
         now -= timedelta(days=1)
 
-    # 📌 최신 거래일 찾기 (공휴일 대응)
     while True:
         target_date = now.strftime("%Y-%m-%d") if days == 1 else None
         url = f"https://fchart.stock.naver.com/sise.nhn?symbol={stock_code}&timeframe=minute&count={days * 78}&requestType=0"
@@ -86,10 +70,9 @@ def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
         df["시간"] = pd.to_datetime(df["시간"])
         df = df[(df["시간"].dt.time >= time(9, 0)) & (df["시간"].dt.time <= time(15, 30))]
 
-        # ✅ 데이터가 없는 경우 → 하루 전으로 이동하여 다시 시도
         if df.empty:
             now -= timedelta(days=1)
-            while now.weekday() in [5, 6]:  # 토요일(5) 또는 일요일(6)
+            while now.weekday() in [5, 6]:  
                 now -= timedelta(days=1)
         else:
             break  # 데이터를 찾았으면 반복 종료
@@ -98,14 +81,6 @@ def get_naver_fchart_minute_data(stock_code, minute="1", days=1):
 
 # 📌 FinanceDataReader를 통해 일별 시세를 가져오는 함수
 def get_daily_stock_data_fdr(ticker, period):
-    """
-    FinanceDataReader를 통해 일별 시세를 가져오는 함수
-    Args:
-        ticker (str): 티커 코드
-        period (str): 기간 ("1month" 또는 "1year")
-    Returns:
-        DataFrame: 주식 데이터
-    """
     try:
         end_date = get_recent_trading_day()
         start_date = (datetime.strptime(end_date, '%Y-%m-%d') - timedelta(
@@ -141,6 +116,13 @@ with col1:
 with col2:
     week_selected = st.button("📆 Week")
 
+# 📌 `1 Month` & `1 Year` 버튼 UI 추가
+col3, col4 = st.columns(2)
+with col3:
+    month_selected = st.button("📆 1 Month")
+with col4:
+    year_selected = st.button("📆 1 Year")
+
 # 📌 버튼 클릭 여부에 따라 데이터 가져오기
 if stock_code:
     if day_selected or week_selected:
@@ -149,18 +131,39 @@ if stock_code:
         if df.empty:
             st.error("❌ 데이터를 불러오지 못했습니다.")
         else:
-            # 📌 📊 가격 차트
+            # 📌 📊 가격 차트 (분봉 - 선 그래프)
             fig = px.line(df, x="시간", y="종가", title=f"{stock_name} {'1 Day' if day_selected else 'Week'}")
             fig.update_xaxes(type="category")
             st.plotly_chart(fig)
 
-    # 📌 추가: FinanceDataReader에서 일별 데이터 조회
-    period = st.selectbox("기간 선택", ["1month", "1year"], index=0)
-    if st.button("📆 일별 데이터 조회"):
+    # 📌 `1 Month` & `1 Year` 캔들차트 (버튼 클릭 시)
+    if month_selected or year_selected:
+        period = "1month" if month_selected else "1year"
         daily_df = get_daily_stock_data_fdr(stock_code, period)
+
         if not daily_df.empty:
             st.write(daily_df)
-            fig_daily = px.line(daily_df, x="Date", y="Close", title=f"{stock_name} {period} 기간 주가")
-            st.plotly_chart(fig_daily)
+
+            # 📊 캔들차트 생성 (일별 데이터 전용)
+            fig_candle = go.Figure(data=[
+                go.Candlestick(
+                    x=daily_df["Date"],
+                    open=daily_df["Open"],
+                    high=daily_df["High"],
+                    low=daily_df["Low"],
+                    close=daily_df["Close"],
+                    increasing_line_color="red",  # 상승: 빨간색
+                    decreasing_line_color="blue"  # 하락: 파란색
+                )
+            ])
+
+            fig_candle.update_layout(
+                title=f"{stock_name} {period} 기간 캔들차트",
+                xaxis_title="날짜",
+                yaxis_title="주가 (KRW)",
+                xaxis_rangeslider_visible=False  # X축 아래 슬라이더 제거
+            )
+
+            st.plotly_chart(fig_candle)
         else:
             st.error("❌ 일별 데이터를 불러오지 못했습니다.")
